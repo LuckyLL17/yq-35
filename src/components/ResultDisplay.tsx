@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { TestMeta } from '@/types';
 import { useScoreStore } from '@/store/useScoreStore';
@@ -24,14 +24,14 @@ export default function ResultDisplay({ test, score, stats, onRetry }: ResultDis
   const completeCurrentRound = useTrainingStore((s) => s.completeCurrentRound);
   const getCurrentTest = useTrainingStore((s) => s.getCurrentTest);
 
-  const [recorded, setRecorded] = useState(false);
+  const recordedRef = useRef(false);
 
   useEffect(() => {
-    if (isTrainingMode && currentSession && !recorded) {
+    if (isTrainingMode && currentSession && !recordedRef.current) {
+      recordedRef.current = true;
       completeCurrentRound(score);
-      setRecorded(true);
     }
-  }, [isTrainingMode, currentSession, score, completeCurrentRound, recorded]);
+  }, [isTrainingMode, currentSession, score, completeCurrentRound]);
 
   const currentTestInfo = getCurrentTest();
 

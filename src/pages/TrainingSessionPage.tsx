@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -59,24 +59,28 @@ export default function TrainingSessionPage() {
     }
   }, [session, navigate]);
 
+  const processedIndexRef = useRef<number | null>(null);
+  const completedRef = useRef(false);
+
   useEffect(() => {
-    if (session && !session.completed) {
-      const currentItem = session.items[session.currentItemIndex];
-      if (currentItem?.completed) {
-        nextItem();
-      }
-    }
+    if (!session || session.completed) return;
+    const currentItem = session.items[session.currentItemIndex];
+    if (!currentItem?.completed) return;
+    if (processedIndexRef.current === session.currentItemIndex) return;
+    processedIndexRef.current = session.currentItemIndex;
+    nextItem();
   }, [session, nextItem]);
 
   useEffect(() => {
-    if (session?.completed) {
-      setShowComplete(true);
-      completeSession();
-      if (dailyTraining && session.planId === dailyTraining.plan.id) {
-        markDailyCompleted();
-      }
+    if (!session?.completed) return;
+    if (completedRef.current) return;
+    completedRef.current = true;
+    setShowComplete(true);
+    completeSession();
+    if (dailyTraining && session.planId === dailyTraining.plan.id) {
+      markDailyCompleted();
     }
-  }, [session?.completed]);
+  }, [session?.completed, session, completeSession, dailyTraining, markDailyCompleted]);
 
   if (!session) return null;
 

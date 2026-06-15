@@ -40,6 +40,7 @@ export default function ReactionTime() {
   const isFakeSignalRef = useRef(false);
   const isTrappedRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const activeModeRef = useRef<ReactionMode>('visual');
   const updateScore = useScoreStore((s) => s.updateScore);
 
   const currentModeInfo = useMemo(
@@ -114,10 +115,10 @@ export default function ReactionTime() {
       if (fakeTimeoutRef.current) clearTimeout(fakeTimeoutRef.current);
       isFakeSignalRef.current = false;
       startTimeRef.current = performance.now();
-      triggerSignal(currentMode);
+      triggerSignal(activeModeRef.current);
       setPhase('ready');
     }, delay);
-  }, [currentMode, triggerSignal, config]);
+  }, [triggerSignal, config]);
 
   const handleClick = useCallback(() => {
     if (phase === 'idle') {
@@ -129,7 +130,7 @@ export default function ReactionTime() {
       setPhase('too-early');
     } else if (phase === 'ready') {
       const time = Math.round(performance.now() - startTimeRef.current);
-      const newAttempts = [...attempts, { time, mode: currentMode }];
+      const newAttempts = [...attempts, { time, mode: activeModeRef.current }];
       setAttempts(newAttempts);
       setReactionTime(time);
 
@@ -148,17 +149,19 @@ export default function ReactionTime() {
       }
       if (selectedMode === 'mixed' || selectedMode === 'random') {
         const nextMode = getNextMode(selectedMode, attempts.length, selectedMode === 'random');
+        activeModeRef.current = nextMode;
         setCurrentMode(nextMode);
       }
       startWait();
     }
-  }, [phase, attempts, currentMode, selectedMode, difficulty, startWait, updateScore, config]);
+  }, [phase, attempts, selectedMode, difficulty, startWait, updateScore, config]);
 
   const handleModeSelect = useCallback((mode: ReactionMode) => {
     setSelectedMode(mode);
     const initialMode = mode === 'mixed' || mode === 'random'
       ? singleModes[0]
       : mode;
+    activeModeRef.current = initialMode;
     setCurrentMode(initialMode);
     setAttempts([]);
     setPhase('idle');
