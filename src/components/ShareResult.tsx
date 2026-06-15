@@ -1,18 +1,22 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Share2, Download, Copy, Check, X, QrCode } from 'lucide-react';
 import type { TestMeta } from '@/types';
 import { REFERENCE_SCORES } from '@/store/useScoreStore';
+import QRCode from 'qrcode';
 
 interface ShareResultProps {
   test: TestMeta;
   score: number;
   isNewBest?: boolean;
+  stats?: { label: string; value: string }[];
 }
 
-export default function ShareResult({ test, score, isNewBest }: ShareResultProps) {
+export default function ShareResult({ test, score, isNewBest, stats }: ShareResultProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const referenceScore = REFERENCE_SCORES[test.id] || 1;
@@ -28,8 +32,34 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
   };
 
   const beatPercentage = calculateBeatPercentage();
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
 
-  const generateShareImage = () => {
+  useEffect(() => {
+    if (isOpen && !qrDataUrl) {
+      QRCode.toDataURL(shareUrl || 'https://example.com', {
+        width: 140,
+        margin: 1,
+        color: {
+          dark: '#1a1a1a',
+          light: '#ffffff',
+        },
+      })
+        .then((url) => setQrDataUrl(url))
+        .catch(() => setQrDataUrl(null));
+    }
+  }, [isOpen, qrDataUrl, shareUrl]);
+
+  useEffect(() => {
+    if (isOpen && qrDataUrl) {
+      const img = new Image();
+      img.onload = () => {
+        generateShareImage(img);
+      };
+      img.src = qrDataUrl;
+    }
+  }, [isOpen, qrDataUrl]);
+
+  const generateShareImage = (qrImage?: HTMLImageElement) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -37,7 +67,7 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
     if (!ctx) return;
 
     const width = 600;
-    const height = 800;
+    const height = stats && stats.length > 0 ? 950 : 800;
     canvas.width = width;
     canvas.height = height;
 
@@ -103,19 +133,24 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
     ctx.fillText(test.name, width / 2, cardY + 90);
 
     const scoreY = cardY + 180;
+    const scoreStr = String(score);
     ctx.fillStyle = test.color;
     ctx.font = 'bold 96px Inter, sans-serif';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.shadowColor = test.color;
     ctx.shadowBlur = 30;
-    ctx.fillText(String(score), width / 2, scoreY);
+    ctx.fillText(scoreStr, width / 2, scoreY);
     ctx.shadowBlur = 0;
 
+    const scoreWidth = ctx.measureText(scoreStr).width;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.font = '24px Inter, sans-serif';
-    ctx.fillText(test.unit, width / 2 + ctx.measureText(String(score)).width / 2 + 15, scoreY - 30);
+    ctx.textAlign = 'left';
+    ctx.fillText(test.unit, width / 2 + scoreWidth / 2 + 20, scoreY - 28);
+    ctx.textBaseline = 'alphabetic';
 
-    const beatY = cardY + 280;
+    const beatY = cardY + 260;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.font = '18px Inter, sans-serif';
     ctx.textAlign = 'center';
@@ -129,22 +164,73 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
     ctx.font = '18px Inter, sans-serif';
     ctx.fillText('的用户', width / 2, beatY + 85);
 
+    let currentY = cardY + 390;
+
+    if (stats && stats.length > 0) {
+      const statsY = currentY;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.font = '16px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('详细数据', width / 2, statsY);
+
+      const cols = stats.length > 2 ? 2 : 1;
+      const rows = Math.ceil(stats.length / cols);
+      const statWidth = (cardW - 60 - (cols > 1 ? 20 : 0)) / cols;
+      const statHeight = 70;
+      const statStartX = cardX + 30;
+      const statStartY = statsY + 25;
+
+      stats.forEach((stat, idx) => {
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const x = statStartX + col * (statWidth + 20);
+        const y = statStartY + row * (statHeight + 12);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, x, y, statWidth, statHeight, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.font = '13px Inter, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(stat.label, x + 16, y + 28);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px JetBrains Mono, monospace';
+        ctx.fillText(stat.value, x + 16, y + 55);
+      });
+
+      currentY = statStartY + rows * (statHeight + 12) + 30;
+    }
+
     const qrSize = 140;
     const qrX = width / 2 - qrSize / 2;
-    const qrY = cardY + 420;
+    const qrY = currentY;
 
     ctx.fillStyle = '#ffffff';
     roundRect(ctx, qrX - 8, qrY - 8, qrSize + 16, qrSize + 16, 12);
     ctx.fill();
 
-    drawQRCodePattern(ctx, qrX, qrY, qrSize, test.color);
+    if (qrImage) {
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+    } else {
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(qrX, qrY, qrSize, qrSize);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '14px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('扫码挑战', width / 2, qrY + qrSize / 2);
+    }
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.font = '14px Inter, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('扫码挑战你的朋友', width / 2, qrY + qrSize + 40);
+    ctx.fillText('扫码挑战你的朋友', width / 2, qrY + qrSize + 35);
 
-    const bottomY = cardY + cardH - 40;
+    const bottomY = cardY + cardH - 30;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.font = '14px Inter, sans-serif';
     ctx.textAlign = 'center';
@@ -152,68 +238,6 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
 
     const url = canvas.toDataURL('image/png');
     setImageUrl(url);
-  };
-
-  const drawQRCodePattern = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    size: number,
-    color: string
-  ) => {
-    const gridSize = 21;
-    const cellSize = size / gridSize;
-
-    ctx.fillStyle = '#1a1a1a';
-
-    for (let i = 0; i < gridSize; i++) {
-      for (let j = 0; j < gridSize; j++) {
-        const isCorner =
-          (i < 7 && j < 7) ||
-          (i < 7 && j >= gridSize - 7) ||
-          (i >= gridSize - 7 && j < 7);
-
-        if (isCorner) continue;
-
-        const hash = ((i * 7 + j * 13 + i * j) % 7) < 3;
-        if (hash) {
-          ctx.fillRect(
-            x + j * cellSize,
-            y + i * cellSize,
-            cellSize + 0.5,
-            cellSize + 0.5
-          );
-        }
-      }
-    }
-
-    const drawCornerSquare = (cx: number, cy: number) => {
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(cx, cy, cellSize * 7, cellSize * 7);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(cx + cellSize, cy + cellSize, cellSize * 5, cellSize * 5);
-      ctx.fillStyle = color;
-      ctx.fillRect(cx + cellSize * 2, cy + cellSize * 2, cellSize * 3, cellSize * 3);
-    };
-
-    drawCornerSquare(x, y);
-    drawCornerSquare(x + size - cellSize * 7, y);
-    drawCornerSquare(x, y + size - cellSize * 7);
-
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(x + size / 2, y + size / 2, cellSize * 2.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(x + size / 2, y + size / 2, cellSize * 1.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(x + size / 2, y + size / 2, cellSize * 0.8, 0, Math.PI * 2);
-    ctx.fill();
   };
 
   const roundRect = (
@@ -239,12 +263,14 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
 
   const handleOpen = () => {
     setIsOpen(true);
-    setTimeout(() => generateShareImage(), 50);
+    setImageUrl(null);
+    setQrDataUrl(null);
   };
 
   const handleClose = () => {
     setIsOpen(false);
     setImageUrl(null);
+    setQrDataUrl(null);
     setCopied(false);
   };
 
@@ -257,7 +283,7 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
   };
 
   const handleCopyText = async () => {
-    const text = `我在「${test.name}」测试中获得了 ${score}${test.unit} 的成绩，击败了全球 ${beatPercentage}% 的用户！来挑战我吧！`;
+    const text = `我在「${test.name}」测试中获得了 ${score}${test.unit} 的成绩，击败了全球 ${beatPercentage}% 的用户！来挑战我吧！${shareUrl}`;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -285,6 +311,84 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
     };
   }, [isOpen]);
 
+  const modal = isOpen ? (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+      onClick={handleClose}
+    >
+      <div
+        className="glass-card p-6 max-w-md w-full max-h-[90vh] overflow-y-auto animate-fade-in-scale"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold">分享成绩</h3>
+          <button
+            onClick={handleClose}
+            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+          >
+            <X className="w-5 h-5 text-white/60" />
+          </button>
+        </div>
+
+        <div className="relative bg-black/30 rounded-xl p-4 mb-6 flex items-center justify-center min-h-[400px]">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt="分享图片"
+              className="max-w-full max-h-[450px] rounded-lg shadow-2xl"
+              style={{ boxShadow: `0 0 60px ${test.color}30` }}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-3 text-white/40">
+              <div className="w-8 h-8 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+              <span>生成中...</span>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <button
+            onClick={handleDownload}
+            disabled={!imageUrl}
+            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            下载图片
+          </button>
+
+          <button
+            onClick={handleCopyText}
+            className="btn-secondary w-full flex items-center justify-center gap-2"
+          >
+            {copied ? (
+              <>
+                <Check className="w-4 h-4 text-neon-green" />
+                <span className="text-neon-green">已复制文案</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4" />
+                复制分享文案
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="mt-4 p-3 rounded-lg bg-white/5 border border-white/10">
+          <div className="flex items-center gap-2 text-xs text-white/40 mb-2">
+            <QrCode className="w-3.5 h-3.5" />
+            <span>分享文案预览</span>
+          </div>
+          <p className="text-sm text-white/70 leading-relaxed">
+            我在「{test.name}」测试中获得了 {score}
+            {test.unit} 的成绩，击败了全球 {beatPercentage}% 的用户！来挑战我吧！
+          </p>
+        </div>
+      </div>
+      <canvas ref={canvasRef} className="hidden" />
+    </div>
+  ) : null;
+
   return (
     <>
       <button
@@ -294,79 +398,7 @@ export default function ShareResult({ test, score, isNewBest }: ShareResultProps
         <Share2 className="w-4 h-4" />
         分享成绩
       </button>
-
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-          <div className="glass-card p-6 max-w-md w-full max-h-[90vh] overflow-y-auto animate-fade-in-scale">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold">分享成绩</h3>
-              <button
-                onClick={handleClose}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-              >
-                <X className="w-5 h-5 text-white/60" />
-              </button>
-            </div>
-
-            <div className="relative bg-black/30 rounded-xl p-4 mb-6 flex items-center justify-center min-h-[400px]">
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt="分享图片"
-                  className="max-w-full max-h-[400px] rounded-lg shadow-2xl"
-                  style={{ boxShadow: `0 0 60px ${test.color}30` }}
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-3 text-white/40">
-                  <div className="w-8 h-8 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
-                  <span>生成中...</span>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <button
-                onClick={handleDownload}
-                disabled={!imageUrl}
-                className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <Download className="w-4 h-4" />
-                下载图片
-              </button>
-
-              <button
-                onClick={handleCopyText}
-                className="btn-secondary w-full flex items-center justify-center gap-2"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-4 h-4 text-neon-green" />
-                    <span className="text-neon-green">已复制文案</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    复制分享文案
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div className="mt-4 p-3 rounded-lg bg-white/5 border border-white/10">
-              <div className="flex items-center gap-2 text-xs text-white/40 mb-2">
-                <QrCode className="w-3.5 h-3.5" />
-                <span>分享文案预览</span>
-              </div>
-              <p className="text-sm text-white/70 leading-relaxed">
-                我在「{test.name}」测试中获得了 {score}
-                {test.unit} 的成绩，击败了全球 {beatPercentage}% 的用户！来挑战我吧！
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <canvas ref={canvasRef} className="hidden" />
+      {typeof document !== 'undefined' && createPortal(modal, document.body)}
     </>
   );
 }

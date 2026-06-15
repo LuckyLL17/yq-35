@@ -103,7 +103,7 @@ export default function ResultDisplay({ test, score, stats, onRetry }: ResultDis
                 <ArrowRight className="w-4 h-4" />
                 返回训练列表
               </button>
-              <ShareResult test={test} score={score} isNewBest={isNewBest} />
+              <ShareResult test={test} score={score} isNewBest={isNewBest} stats={stats} />
             </>
           ) : (
             <>
@@ -118,7 +118,7 @@ export default function ResultDisplay({ test, score, stats, onRetry }: ResultDis
                 <RotateCcw className="w-4 h-4" />
                 再测一次
               </button>
-              <ShareResult test={test} score={score} isNewBest={isNewBest} />
+              <ShareResult test={test} score={score} isNewBest={isNewBest} stats={stats} />
             </>
           )}
         </div>
@@ -175,7 +175,7 @@ export default function ResultDisplay({ test, score, stats, onRetry }: ResultDis
           <Home className="w-4 h-4" />
           返回首页
         </Link>
-        <ShareResult test={test} score={score} isNewBest={isNewBest} />
+        <ShareResult test={test} score={score} isNewBest={isNewBest} stats={stats} />
       </div>
     </div>
   );
