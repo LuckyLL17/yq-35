@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, REACTION_MODES, REACTION_DIFFICULTY, DIFFICULTY_OPTIONS, type ReactionMode, type DifficultyLevel } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { TESTS, REACTION_MODES, REACTION_DIFFICULTY, DIFFICULTY_OPTIONS, type ReactionMode } from '@/types';
+import { useTestFlow } from '@/hooks/useTestFlow';
 import { Eye, Volume2, Smartphone, Shuffle, Dice5, ChevronLeft } from 'lucide-react';
 
 type Phase = 'select-difficulty' | 'select' | 'idle' | 'waiting' | 'fake-signal' | 'ready' | 'too-early' | 'result';
@@ -28,32 +27,36 @@ function getNextMode(currentMode: ReactionMode, attemptIndex: number, isRandom: 
 
 export default function ReactionTime() {
   const test = TESTS.find((t) => t.id === 'reaction')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [selectedMode, setSelectedMode] = useState<ReactionMode | null>(null);
   const [currentMode, setCurrentMode] = useState<ReactionMode>('visual');
   const [reactionTime, setReactionTime] = useState(0);
   const [attempts, setAttempts] = useState<{ time: number; mode: ReactionMode }[]>([]);
   const startTimeRef = useRef(0);
-  const testStartRef = useRef(0);
   const timeoutRef = useRef<number | null>(null);
   const fakeTimeoutRef = useRef<number | null>(null);
   const isFakeSignalRef = useRef(false);
   const isTrappedRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const activeModeRef = useRef<ReactionMode>('visual');
-  const updateScore = useScoreStore((s) => s.updateScore);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
+
+  const { phase, setPhase, difficulty, config, finishTest, restart, selectDifficulty } =
+    useTestFlow<Phase, typeof REACTION_DIFFICULTY.normal>({
+      testId: 'reaction',
+      difficultyConfig: REACTION_DIFFICULTY,
+      onReset: () => {
+        setAttempts([]);
+        setSelectedMode(null);
+        setCurrentMode('visual');
+        activeModeRef.current = 'visual';
+        setReactionTime(0);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (fakeTimeoutRef.current) clearTimeout(fakeTimeoutRef.current);
+      },
+    });
 
   const currentModeInfo = useMemo(
     () => REACTION_MODES.find((m) => m.id === currentMode)!,
-    [currentMode]
-  );
-
-  const config = useMemo(
-    () => REACTION_DIFFICULTY[difficulty ?? 'normal'],
-    [difficulty]
+    [currentMode],
   );
 
   const getAudioContext = useCallback(() => {
@@ -97,9 +100,6 @@ export default function ReactionTime() {
   }, [playBeep, triggerVibration]);
 
   const startWait = useCallback(() => {
-    if (testStartRef.current === 0) {
-      testStartRef.current = performance.now();
-    }
     setPhase('waiting');
     isFakeSignalRef.current = false;
     const delay = config.minDelay + Math.random() * (config.maxDelay - config.minDelay);
@@ -121,7 +121,7 @@ export default function ReactionTime() {
       triggerSignal(activeModeRef.current);
       setPhase('ready');
     }, delay);
-  }, [triggerSignal, config]);
+  }, [triggerSignal, config, setPhase]);
 
   const handleClick = useCallback(() => {
     if (phase === 'idle') {
@@ -139,9 +139,7 @@ export default function ReactionTime() {
 
       if (newAttempts.length >= config.rounds) {
         const avg = Math.round(newAttempts.reduce((a, b) => a + b.time, 0) / newAttempts.length);
-        const duration = Math.round(performance.now() - testStartRef.current);
-        updateScore('reaction', avg, duration, { mode: selectedMode, difficulty, attempts: newAttempts });
-        testStartRef.current = 0;
+        finishTest(avg, undefined, { mode: selectedMode, difficulty, attempts: newAttempts });
       }
       setPhase('result');
     } else if (phase === 'too-early') {
@@ -157,7 +155,7 @@ export default function ReactionTime() {
       }
       startWait();
     }
-  }, [phase, attempts, selectedMode, difficulty, startWait, updateScore, config]);
+  }, [phase, attempts, selectedMode, difficulty, startWait, finishTest, config, setPhase]);
 
   const handleModeSelect = useCallback((mode: ReactionMode) => {
     setSelectedMode(mode);
@@ -168,7 +166,7 @@ export default function ReactionTime() {
     setCurrentMode(initialMode);
     setAttempts([]);
     setPhase('idle');
-  }, []);
+  }, [setPhase]);
 
   const handleBackToSelect = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -176,18 +174,7 @@ export default function ReactionTime() {
     setSelectedMode(null);
     setAttempts([]);
     setPhase('select-difficulty');
-  }, []);
-
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      setDifficulty('normal');
-      setSelectedMode('visual');
-      activeModeRef.current = 'visual';
-      setCurrentMode('visual');
-      setAttempts([]);
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
+  }, [setPhase]);
 
   useEffect(() => {
     return () => {
@@ -240,11 +227,11 @@ export default function ReactionTime() {
       case 'idle':
         return { title: '反应时间测试', subtitle: '点击开始' };
       case 'waiting':
-        return { title: modeText.waiting, subtitle: modeText.subtitle };
+        return { title: modeText!.waiting, subtitle: modeText!.subtitle };
       case 'fake-signal':
-        return { title: modeText.ready, subtitle: '' };
+        return { title: modeText!.ready, subtitle: '' };
       case 'ready':
-        return { title: modeText.ready, subtitle: '' };
+        return { title: modeText!.ready, subtitle: '' };
       case 'too-early':
         return { title: isTrappedRef.current ? '陷阱！' : '太早了！', subtitle: '点击重试' };
       case 'result':
@@ -275,7 +262,7 @@ export default function ReactionTime() {
             <DifficultySelector
               selected={difficulty}
               onSelect={(level) => {
-                setDifficulty(level);
+                selectDifficulty(level);
                 setPhase('select');
               }}
               testColor={test.color}
@@ -422,16 +409,12 @@ export default function ReactionTime() {
             score={avgScore}
             onRetry={() => {
               setAttempts([]);
-              if (isTrainingMode) {
-                if (selectedMode === 'mixed' || selectedMode === 'random') {
-                  const nextMode = getNextMode(selectedMode, 0, selectedMode === 'random');
-                  activeModeRef.current = nextMode;
-                  setCurrentMode(nextMode);
-                }
-                setPhase('idle');
-              } else {
-                setPhase('select-difficulty');
+              if (selectedMode === 'mixed' || selectedMode === 'random') {
+                const nextMode = getNextMode(selectedMode, 0, selectedMode === 'random');
+                activeModeRef.current = nextMode;
+                setCurrentMode(nextMode);
               }
+              restart();
             }}
             stats={[
               ...(difficulty

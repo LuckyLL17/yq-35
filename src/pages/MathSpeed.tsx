@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, DifficultyLevel, MATH_DIFFICULTY, DIFFICULTY_OPTIONS, type MathDifficultyConfig } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { TESTS, MATH_DIFFICULTY, DIFFICULTY_OPTIONS, type MathDifficultyConfig } from '@/types';
+import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
 
@@ -42,72 +41,48 @@ function generateQuestion(config: MathDifficultyConfig): Question {
 
 export default function MathSpeed() {
   const test = TESTS.find((t) => t.id === 'math-speed')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
-  const [timeLeft, setTimeLeft] = useState(60);
   const [question, setQuestion] = useState<Question | null>(null);
   const [input, setInput] = useState('');
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const timerRef = useRef<number | null>(null);
-  const updateScore = useScoreStore((s) => s.updateScore);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
 
-  const config = difficulty ? MATH_DIFFICULTY[difficulty] : null;
+  const { phase, setPhase, difficulty, config, startTimer, finishTest, restart, selectDifficulty, timeLeft, startCountdown } =
+    useTestFlow<Phase, MathDifficultyConfig>({
+      testId: 'math-speed',
+      difficultyConfig: MATH_DIFFICULTY,
+      onReset: () => {
+        setCorrectCount(0);
+        setWrongCount(0);
+        setQuestion(null);
+        setInput('');
+      },
+    });
 
-  const handleDifficultySelect = (level: DifficultyLevel) => {
-    const cfg = MATH_DIFFICULTY[level];
-    setDifficulty(level);
-    setTimeLeft(cfg.timeLimit);
-    setPhase('idle');
+  const handleDifficultySelect = (level: Parameters<typeof selectDifficulty>[0]) => {
+    selectDifficulty(level);
+    startCountdown(MATH_DIFFICULTY[level].timeLimit);
   };
-
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      const cfg = MATH_DIFFICULTY.normal;
-      setDifficulty('normal');
-      setTimeLeft(cfg.timeLimit);
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
 
   const startTest = useCallback(() => {
     if (!config) return;
-    setTimeLeft(config.timeLimit);
+    startTimer();
+    startCountdown(config.timeLimit);
     setCorrectCount(0);
     setWrongCount(0);
     setQuestion(generateQuestion(config));
     setInput('');
     setPhase('playing');
 
-    timerRef.current = window.setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, [config]);
+  }, [config, setPhase, startTimer, startCountdown]);
 
   useEffect(() => {
     if (phase === 'playing' && timeLeft === 0) {
       const timeLimitMs = (config?.timeLimit ?? 60) * 1000;
-      updateScore('math-speed', correctCount, timeLimitMs);
-      setPhase('result');
+      finishTest(correctCount, timeLimitMs);
     }
-  }, [timeLeft, phase, correctCount, updateScore, config]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+  }, [timeLeft, phase, correctCount, finishTest, config]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -125,17 +100,6 @@ export default function MathSpeed() {
     },
     [question, input, config],
   );
-
-  const handleRestart = () => {
-    if (isTrainingMode) {
-      const cfg = MATH_DIFFICULTY[difficulty ?? 'normal'];
-      setTimeLeft(cfg.timeLimit);
-      setPhase('idle');
-    } else {
-      setDifficulty(null);
-      setPhase('select-difficulty');
-    }
-  };
 
   const difficultyLabel = difficulty
     ? DIFFICULTY_OPTIONS.find((d) => d.level === difficulty)?.name ?? ''
@@ -240,7 +204,10 @@ export default function MathSpeed() {
           <ResultDisplay
             test={test}
             score={correctCount}
-            onRetry={handleRestart}
+            onRetry={() => {
+              if (difficulty) startCountdown(MATH_DIFFICULTY[difficulty].timeLimit);
+              restart();
+            }}
             stats={[
               { label: '难度', value: difficultyLabel },
               { label: '正确数', value: `${correctCount}` },

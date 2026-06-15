@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, DifficultyLevel, AIM_DIFFICULTY } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { TESTS, AIM_DIFFICULTY } from '@/types';
+import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
 
@@ -16,8 +15,6 @@ interface Target {
 
 export default function AimTrainer() {
   const test = TESTS.find((t) => t.id === 'aim')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [targets, setTargets] = useState<Target[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [startTime, setStartTime] = useState(0);
@@ -26,13 +23,21 @@ export default function AimTrainer() {
   const areaRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef(0);
   const lastClickRef = useRef(0);
-  const updateScore = useScoreStore((s) => s.updateScore);
   const animRef = useRef<number>(0);
   const currentIndexRef = useRef(0);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
 
-  const config = difficulty ? AIM_DIFFICULTY[difficulty] : AIM_DIFFICULTY.normal;
+  const { phase, setPhase, difficulty, config, finishTest, restart, selectDifficulty } =
+    useTestFlow<Phase, typeof AIM_DIFFICULTY.normal>({
+      testId: 'aim',
+      difficultyConfig: AIM_DIFFICULTY,
+      onReset: () => {
+        setTargets([]);
+        setCurrentIndex(0);
+        setClickTimes([]);
+        setMissCount(0);
+        setStartTime(0);
+      },
+    });
 
   const generateTargets = useCallback(() => {
     const rect = areaRef.current?.getBoundingClientRect();
@@ -52,21 +57,6 @@ export default function AimTrainer() {
     return result;
   }, [config.targetCount, config.targetSize]);
 
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      setDifficulty('normal');
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
-
-  const startTest = useCallback(() => {
-    if (isTrainingMode) {
-      setPhase('idle');
-    } else {
-      setPhase('select-difficulty');
-    }
-  }, [isTrainingMode]);
-
   const beginPlaying = useCallback(() => {
     const ts = generateTargets();
     setTargets(ts);
@@ -77,7 +67,7 @@ export default function AimTrainer() {
     setPhase('playing');
     startTimeRef.current = performance.now();
     lastClickRef.current = performance.now();
-  }, [generateTargets]);
+  }, [generateTargets, setPhase]);
 
   useEffect(() => {
     currentIndexRef.current = currentIndex;
@@ -132,14 +122,13 @@ export default function AimTrainer() {
       if (currentIndex + 1 >= targets.length) {
         const avg = Math.round(newTimes.reduce((a, b) => a + b, 0) / newTimes.length);
         const duration = Math.round(now - startTimeRef.current);
-        updateScore('aim', avg, duration);
         setStartTime(duration);
-        setPhase('result');
+        finishTest(avg, duration);
       } else {
         setCurrentIndex(currentIndex + 1);
       }
     },
-    [clickTimes, currentIndex, targets.length, updateScore],
+    [clickTimes, currentIndex, targets.length, finishTest],
   );
 
   const handleMiss = useCallback(() => {
@@ -147,12 +136,6 @@ export default function AimTrainer() {
       setMissCount((c) => c + 1);
     }
   }, [phase]);
-
-  useEffect(() => {
-    if (!startTime) {
-      // noop
-    }
-  }, [startTime]);
 
   const avgTime =
     clickTimes.length > 0
@@ -169,9 +152,7 @@ export default function AimTrainer() {
           <div className="p-8 md:p-12 text-center">
             <DifficultySelector
               selected={difficulty}
-              onSelect={(level) => {
-                setDifficulty(level);
-              }}
+              onSelect={selectDifficulty}
               testColor={test.color}
             />
             <button
@@ -260,7 +241,7 @@ export default function AimTrainer() {
             <ResultDisplay
               test={test}
               score={Math.round(avgTime)}
-              onRetry={startTest}
+              onRetry={restart}
               stats={[
                 { label: '难度', value: difficultyLabel },
                 { label: '总用时', value: `${Math.round(startTime)}ms` },

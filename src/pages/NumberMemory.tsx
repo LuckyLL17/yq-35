@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useRef, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, DifficultyLevel, NUMBER_MEMORY_DIFFICULTY, DIFFICULTY_OPTIONS } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { TESTS, NUMBER_MEMORY_DIFFICULTY, DIFFICULTY_OPTIONS, type NumberMemoryDifficultyConfig } from '@/types';
+import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'showing' | 'input' | 'result';
 
@@ -18,8 +17,6 @@ function generateNumber(length: number): string {
 
 export default function NumberMemory() {
   const test = TESTS.find((t) => t.id === 'number-memory')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [level, setLevel] = useState(3);
   const [number, setNumber] = useState('');
   const [input, setInput] = useState('');
@@ -27,19 +24,46 @@ export default function NumberMemory() {
   const [finalLevel, setFinalLevel] = useState(0);
   const [shaking, setShaking] = useState(false);
   const timeoutRef = useRef<number | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const testStartRef = useRef(0);
-  const updateScore = useScoreStore((s) => s.updateScore);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
 
-  const config = difficulty ? NUMBER_MEMORY_DIFFICULTY[difficulty] : NUMBER_MEMORY_DIFFICULTY.normal;
-  const getShowDuration = (lvl: number) => config.showDurationBase + lvl * config.showDurationPerDigit;
+  const {
+    phase,
+    setPhase,
+    difficulty,
+    config,
+    isTrainingMode,
+    testStartRef,
+    startTimer,
+    elapsed,
+    finishTest,
+    restart,
+    selectDifficulty,
+  } = useTestFlow<Phase, NumberMemoryDifficultyConfig>({
+    testId: 'number-memory',
+    difficultyConfig: NUMBER_MEMORY_DIFFICULTY,
+    onReset: () => {
+      if (isTrainingMode) {
+        const cfg = NUMBER_MEMORY_DIFFICULTY[difficulty ?? 'normal'];
+        setLevel(cfg.startLevel);
+      } else {
+        setLevel(3);
+      }
+      setNumber('');
+      setInput('');
+      setShaking(false);
+      setFinalLevel(0);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    },
+  });
+
+  const getShowDuration = useCallback((lvl: number) => config.showDurationBase + lvl * config.showDurationPerDigit, [config.showDurationBase, config.showDurationPerDigit]);
 
   const startTest = useCallback((lvl: number) => {
     if (testStartRef.current === 0) {
-      testStartRef.current = Date.now();
+      startTimer();
     }
     const num = generateNumber(lvl);
     setNumber(num);
@@ -48,21 +72,22 @@ export default function NumberMemory() {
     setInput('');
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (timerRef.current) clearInterval(timerRef.current);
 
     const start = Date.now();
-    timerRef.current = window.setInterval(() => {
-      const elapsed = Date.now() - start;
-      const remaining = Math.max(0, getShowDuration(lvl) - elapsed);
+    const duration = getShowDuration(lvl);
+    const progressInterval = window.setInterval(() => {
+      const elapsedMs = Date.now() - start;
+      const remaining = Math.max(0, duration - elapsedMs);
       setShowTime(remaining);
-      if (remaining <= 0 && timerRef.current) clearInterval(timerRef.current);
+      if (remaining <= 0) clearInterval(progressInterval);
     }, 50);
 
     timeoutRef.current = window.setTimeout(() => {
+      clearInterval(progressInterval);
       setPhase('input');
       setTimeout(() => inputRef.current?.focus(), 100);
-    }, getShowDuration(lvl));
-  }, [config]);
+    }, duration);
+  }, [startTimer, setPhase, testStartRef, getShowDuration]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -76,42 +101,12 @@ export default function NumberMemory() {
         setTimeout(() => setShaking(false), 300);
         const finalLvl = Math.max(0, level - 1);
         setFinalLevel(finalLvl);
-        const duration = Date.now() - testStartRef.current;
-        updateScore('number-memory', finalLvl, duration);
-        testStartRef.current = 0;
-        setPhase('result');
+        const duration = elapsed();
+        finishTest(finalLvl, duration);
       }
     },
-    [input, number, level, startTest, updateScore],
+    [input, number, level, startTest, elapsed, finishTest],
   );
-
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      const cfg = NUMBER_MEMORY_DIFFICULTY.normal;
-      setDifficulty('normal');
-      setLevel(cfg.startLevel);
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
-  const handleRestart = () => {
-    if (isTrainingMode) {
-      const cfg = NUMBER_MEMORY_DIFFICULTY[difficulty ?? 'normal'];
-      setLevel(cfg.startLevel);
-      setPhase('idle');
-    } else {
-      setDifficulty(null);
-      setLevel(3);
-      setPhase('select-difficulty');
-    }
-  };
 
   return (
     <TestLayout test={test}>
@@ -126,10 +121,9 @@ export default function NumberMemory() {
             <DifficultySelector
               selected={difficulty}
               onSelect={(lvl) => {
-                setDifficulty(lvl);
+                selectDifficulty(lvl);
                 const cfg = NUMBER_MEMORY_DIFFICULTY[lvl];
                 setLevel(cfg.startLevel);
-                setPhase('idle');
               }}
               testColor={test.color}
             />
@@ -248,7 +242,7 @@ export default function NumberMemory() {
           <ResultDisplay
             test={test}
             score={finalLevel}
-            onRetry={handleRestart}
+            onRetry={restart}
             stats={[
               { label: '难度', value: difficulty ? DIFFICULTY_OPTIONS.find((d) => d.level === difficulty)?.name ?? '' : '' },
               { label: '显示数字', value: number },

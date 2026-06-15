@@ -1,102 +1,64 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, DifficultyLevel, TYPING_DIFFICULTY } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { TESTS, TYPING_DIFFICULTY } from '@/types';
+import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
 
 export default function TypingSpeed() {
   const test = TESTS.find((t) => t.id === 'typing')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [text, setText] = useState('');
   const [input, setInput] = useState('');
-  const [timeLeft, setTimeLeft] = useState(60);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const timerRef = useRef<number | null>(null);
-  const updateScore = useScoreStore((s) => s.updateScore);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
 
-  const config = difficulty ? TYPING_DIFFICULTY[difficulty] : null;
+  const { phase, setPhase, difficulty, config, startTimer, finishTest, restart, selectDifficulty, timeLeft, startCountdown, clearCountdown } =
+    useTestFlow<Phase, typeof TYPING_DIFFICULTY.normal>({
+      testId: 'typing',
+      difficultyConfig: TYPING_DIFFICULTY,
+      onReset: () => {
+        if (difficulty) {
+          const cfg = TYPING_DIFFICULTY[difficulty];
+          setText(cfg.textPool[Math.floor(Math.random() * cfg.textPool.length)]);
+        } else {
+          setText('');
+        }
+        setInput('');
+      },
+    });
 
-  const handleDifficultySelect = (level: DifficultyLevel) => {
+  const handleDifficultySelect = (level: Parameters<typeof selectDifficulty>[0]) => {
     const cfg = TYPING_DIFFICULTY[level];
-    setDifficulty(level);
+    selectDifficulty(level);
     setText(cfg.textPool[Math.floor(Math.random() * cfg.textPool.length)]);
-    setTimeLeft(cfg.timeLimit);
-    setPhase('idle');
   };
 
-  const finishTest = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-
+  const finishTypingTest = useCallback(() => {
+    clearCountdown();
     const correctChars = input.split('').filter((c, i) => c === text[i]).length;
     const correctWords = Math.floor(correctChars / 5);
     const timeLimitMs = (config?.timeLimit ?? 60) * 1000;
-
-    updateScore('typing', correctWords, timeLimitMs);
-    setPhase('result');
-  }, [input, text, updateScore, config]);
+    finishTest(correctWords, timeLimitMs);
+  }, [input, text, finishTest, config, clearCountdown]);
 
   const startTest = useCallback(() => {
+    startTimer();
     setPhase('playing');
-    setTimeLeft(config?.timeLimit ?? 60);
+    startCountdown(config?.timeLimit ?? 60);
     setInput('');
 
     setTimeout(() => textareaRef.current?.focus(), 50);
-
-    timerRef.current = window.setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, [config]);
+  }, [config, setPhase, startTimer, startCountdown]);
 
   useEffect(() => {
     if (phase === 'playing' && timeLeft === 0) {
-      finishTest();
+      finishTypingTest();
     }
-  }, [timeLeft, phase, finishTest]);
-
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      const cfg = TYPING_DIFFICULTY.normal;
-      setDifficulty('normal');
-      setText(cfg.textPool[Math.floor(Math.random() * cfg.textPool.length)]);
-      setTimeLeft(cfg.timeLimit);
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+  }, [timeLeft, phase, finishTypingTest]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-  };
-
-  const handleRestart = () => {
-    if (isTrainingMode) {
-      const cfg = TYPING_DIFFICULTY[difficulty ?? 'normal'];
-      setText(cfg.textPool[Math.floor(Math.random() * cfg.textPool.length)]);
-      setTimeLeft(cfg.timeLimit);
-      setPhase('idle');
-    } else {
-      setDifficulty(null);
-      setText('');
-      setPhase('select-difficulty');
-    }
   };
 
   const correctChars = input.split('').filter((c, i) => c === text[i]).length;
@@ -210,7 +172,7 @@ export default function TypingSpeed() {
             />
 
             <div className="mt-4 flex justify-end">
-              <button onClick={finishTest} className="btn-secondary">
+              <button onClick={finishTypingTest} className="btn-secondary">
                 提前结束
               </button>
             </div>
@@ -218,7 +180,7 @@ export default function TypingSpeed() {
         )}
 
         {phase === 'result' && (
-          <ResultDisplay test={test} score={finalWPM} stats={stats} onRetry={handleRestart} />
+          <ResultDisplay test={test} score={finalWPM} stats={stats} onRetry={restart} />
         )}
       </div>
     </TestLayout>

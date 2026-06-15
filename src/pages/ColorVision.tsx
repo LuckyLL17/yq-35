@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, DIFFICULTY_OPTIONS, DifficultyLevel, COLOR_VISION_DIFFICULTY } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { TESTS, DIFFICULTY_OPTIONS, COLOR_VISION_DIFFICULTY } from '@/types';
+import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
 
@@ -43,19 +42,23 @@ function getGridSize(level: number, diffMultiplier: number): { size: number; dif
 
 export default function ColorVision() {
   const test = TESTS.find((t) => t.id === 'color-vision')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [level, setLevel] = useState(1);
   const [diffIdx, setDiffIdx] = useState(0);
   const [baseColor, setBaseColor] = useState('#ffffff');
   const [finalLevel, setFinalLevel] = useState(0);
   const [lives, setLives] = useState(3);
-  const testStartRef = useRef(0);
-  const updateScore = useScoreStore((s) => s.updateScore);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
 
-  const config = difficulty ? COLOR_VISION_DIFFICULTY[difficulty] : COLOR_VISION_DIFFICULTY.normal;
+  const { phase, setPhase, difficulty, config, startTimer, finishTest, restart, selectDifficulty } =
+    useTestFlow<Phase, typeof COLOR_VISION_DIFFICULTY.normal>({
+      testId: 'color-vision',
+      difficultyConfig: COLOR_VISION_DIFFICULTY,
+      onReset: () => {
+        setLevel(1);
+        setDiffIdx(0);
+        setFinalLevel(0);
+        setLives(config.lives);
+      },
+    });
 
   const generateLevel = useCallback(
     (lvl: number) => {
@@ -72,33 +75,12 @@ export default function ColorVision() {
   );
 
   const startTest = useCallback(() => {
-    testStartRef.current = Date.now();
+    startTimer();
     setLevel(1);
     setLives(config.lives);
     generateLevel(1);
     setPhase('playing');
-  }, [generateLevel, config.lives]);
-
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      setDifficulty('normal');
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
-
-  const handleDifficultySelect = (lvl: DifficultyLevel) => {
-    setDifficulty(lvl);
-    setPhase('idle');
-  };
-
-  const handleRestart = () => {
-    if (isTrainingMode) {
-      setPhase('idle');
-    } else {
-      setDifficulty(null);
-      setPhase('select-difficulty');
-    }
-  };
+  }, [generateLevel, config.lives, setPhase, startTimer]);
 
   const handleClick = useCallback(
     (idx: number) => {
@@ -111,15 +93,13 @@ export default function ColorVision() {
         setLives(newLives);
         if (newLives <= 0) {
           setFinalLevel(level - 1);
-          const duration = Date.now() - testStartRef.current;
-          updateScore('color-vision', level - 1, duration);
-          setPhase('result');
+          finishTest(level - 1);
         } else {
           generateLevel(level);
         }
       }
     },
-    [diffIdx, level, lives, generateLevel, updateScore],
+    [diffIdx, level, lives, generateLevel, finishTest],
   );
 
   const { size } = getGridSize(level, config.diffMultiplier);
@@ -149,7 +129,7 @@ export default function ColorVision() {
             </p>
             <DifficultySelector
               selected={difficulty}
-              onSelect={handleDifficultySelect}
+              onSelect={selectDifficulty}
               testColor={test.color}
             />
           </div>
@@ -233,7 +213,7 @@ export default function ColorVision() {
           <ResultDisplay
             test={test}
             score={finalLevel}
-            onRetry={handleRestart}
+            onRetry={restart}
             stats={[
               { label: '到达关卡', value: `${level}` },
               ...(diffOpt ? [{ label: '难度', value: diffOpt.name }] : []),

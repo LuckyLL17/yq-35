@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, DifficultyLevel, SEQUENCE_DIFFICULTY } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { TESTS, SEQUENCE_DIFFICULTY, DifficultyLevel } from '@/types';
+import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'showing' | 'playing' | 'result';
 
@@ -18,20 +17,26 @@ const DIFFICULTY_LABEL: Record<DifficultyLevel, string> = {
 
 export default function SequenceMemory() {
   const test = TESTS.find((t) => t.id === 'sequence-memory')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [sequence, setSequence] = useState<number[]>([]);
   const [playerIndex, setPlayerIndex] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [finalScore, setFinalScore] = useState(0);
   const [showingIndex, setShowingIndex] = useState<number | null>(null);
   const timeoutRefs = useRef<number[]>([]);
-  const testStartRef = useRef(0);
-  const updateScore = useScoreStore((s) => s.updateScore);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
 
-  const config = difficulty ? SEQUENCE_DIFFICULTY[difficulty] : SEQUENCE_DIFFICULTY.normal;
+  const { phase, setPhase, difficulty, config, startTimer, finishTest, restart, selectDifficulty } =
+    useTestFlow<Phase, typeof SEQUENCE_DIFFICULTY.normal>({
+      testId: 'sequence-memory',
+      difficultyConfig: SEQUENCE_DIFFICULTY,
+      onReset: () => {
+        setSequence([]);
+        setPlayerIndex(0);
+        setActiveIndex(null);
+        setFinalScore(0);
+        setShowingIndex(null);
+      },
+    });
+
   const colors = ALL_COLORS.slice(0, config.colorCount);
 
   const clearTimers = useCallback(() => {
@@ -68,16 +73,16 @@ export default function SequenceMemory() {
       }, seq.length * config.showInterval + 500);
       timeoutRefs.current.push(endId);
     },
-    [clearTimers, config.showInterval, config.showDuration],
+    [clearTimers, setPhase, config.showInterval, config.showDuration],
   );
 
   const startTest = useCallback(() => {
     clearTimers();
-    testStartRef.current = Date.now();
+    startTimer();
     const first = addRound([]);
     setSequence(first);
     setTimeout(() => playSequence(first), 300);
-  }, [addRound, playSequence, clearTimers]);
+  }, [addRound, playSequence, clearTimers, startTimer]);
 
   useEffect(() => {
     return () => clearTimers();
@@ -94,8 +99,6 @@ export default function SequenceMemory() {
         const nextIdx = playerIndex + 1;
 
         if (nextIdx >= sequence.length) {
-          const duration = Date.now() - testStartRef.current;
-          updateScore('sequence-memory', sequence.length, duration);
           const nextSeq = addRound(sequence);
           setSequence(nextSeq);
           setTimeout(() => playSequence(nextSeq), 800);
@@ -104,45 +107,11 @@ export default function SequenceMemory() {
         }
       } else {
         setFinalScore(sequence.length - 1);
-        const duration = Date.now() - testStartRef.current;
-        updateScore('sequence-memory', sequence.length - 1, duration);
-        setPhase('result');
+        finishTest(sequence.length - 1);
       }
     },
-    [phase, sequence, playerIndex, addRound, playSequence, updateScore],
+    [phase, sequence, playerIndex, addRound, playSequence, finishTest],
   );
-
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      setDifficulty('normal');
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
-
-  const handleDifficultySelect = useCallback((level: DifficultyLevel) => {
-    setDifficulty(level);
-    setPhase('idle');
-  }, []);
-
-  const handleRestart = useCallback(() => {
-    clearTimers();
-    if (isTrainingMode) {
-      setPhase('idle');
-      setSequence([]);
-      setPlayerIndex(0);
-      setActiveIndex(null);
-      setFinalScore(0);
-      setShowingIndex(null);
-    } else {
-      setDifficulty(null);
-      setPhase('select-difficulty');
-      setSequence([]);
-      setPlayerIndex(0);
-      setActiveIndex(null);
-      setFinalScore(0);
-      setShowingIndex(null);
-    }
-  }, [clearTimers, isTrainingMode]);
 
   return (
     <TestLayout test={test}>
@@ -156,7 +125,7 @@ export default function SequenceMemory() {
           </p>
           <DifficultySelector
             selected={difficulty}
-            onSelect={handleDifficultySelect}
+            onSelect={selectDifficulty}
             testColor={test.color}
           />
         </div>
@@ -237,7 +206,7 @@ export default function SequenceMemory() {
         <ResultDisplay
           test={test}
           score={finalScore}
-          onRetry={handleRestart}
+          onRetry={restart}
           stats={[
             { label: '序列长度', value: `${sequence.length}` },
             ...(difficulty ? [{ label: '难度', value: DIFFICULTY_LABEL[difficulty] }] : []),

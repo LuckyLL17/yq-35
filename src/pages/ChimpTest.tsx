@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, type DifficultyLevel, CHIMP_DIFFICULTY } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { TESTS, CHIMP_DIFFICULTY } from '@/types';
+import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'showing' | 'playing' | 'result';
 
@@ -32,19 +31,24 @@ function generateGrid(level: number, gridSize: number): Cell[] {
 
 export default function ChimpTest() {
   const test = TESTS.find((t) => t.id === 'chimp')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [level, setLevel] = useState(4);
   const [cells, setCells] = useState<Cell[]>([]);
   const [nextNum, setNextNum] = useState(1);
   const [finalLevel, setFinalLevel] = useState(0);
   const [shaking, setShaking] = useState(false);
-  const testStartRef = useRef(0);
-  const updateScore = useScoreStore((s) => s.updateScore);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
 
-  const config = difficulty ? CHIMP_DIFFICULTY[difficulty] : CHIMP_DIFFICULTY.normal;
+  const { phase, setPhase, difficulty, config, startTimer, finishTest, restart, selectDifficulty } =
+    useTestFlow<Phase, typeof CHIMP_DIFFICULTY.normal>({
+      testId: 'chimp',
+      difficultyConfig: CHIMP_DIFFICULTY,
+      onReset: () => {
+        const cfg = CHIMP_DIFFICULTY[difficulty ?? 'normal'];
+        setLevel(cfg.startLevel);
+        setCells([]);
+        setNextNum(1);
+        setFinalLevel(0);
+      },
+    });
 
   const startLevel = useCallback((lvl: number, gridSize: number, showTimeBase: number, showTimePerCell: number) => {
     const grid = generateGrid(lvl, gridSize);
@@ -54,14 +58,14 @@ export default function ChimpTest() {
 
     const showTime = showTimeBase + lvl * showTimePerCell;
     setTimeout(() => setPhase('playing'), showTime);
-  }, []);
+  }, [setPhase]);
 
   const startTest = useCallback(() => {
-    testStartRef.current = Date.now();
+    startTimer();
     const cfg = CHIMP_DIFFICULTY[difficulty!];
     setLevel(cfg.startLevel);
     startLevel(cfg.startLevel, cfg.gridSize, cfg.showTimeBase, cfg.showTimePerCell);
-  }, [difficulty, startLevel]);
+  }, [difficulty, startLevel, startTimer]);
 
   const handleCellClick = (cell: Cell) => {
     if (phase !== 'playing') return;
@@ -79,37 +83,9 @@ export default function ChimpTest() {
         setTimeout(() => setShaking(false), 300);
         const finalLvl = Math.max(0, level - 1);
         setFinalLevel(finalLvl);
-        const duration = Date.now() - testStartRef.current;
-        updateScore('chimp', finalLvl, duration);
-        setPhase('result');
+        finishTest(finalLvl);
       }
   };
-
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      const cfg = CHIMP_DIFFICULTY.normal;
-      setDifficulty('normal');
-      setLevel(cfg.startLevel);
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
-
-  const handleDifficultySelect = useCallback((lvl: DifficultyLevel) => {
-    setDifficulty(lvl);
-    setLevel(CHIMP_DIFFICULTY[lvl].startLevel);
-    setPhase('idle');
-  }, []);
-
-  const handleRestart = useCallback(() => {
-    if (isTrainingMode) {
-      const cfg = CHIMP_DIFFICULTY[difficulty ?? 'normal'];
-      setLevel(cfg.startLevel);
-      setPhase('idle');
-    } else {
-      setDifficulty(null);
-      setPhase('select-difficulty');
-    }
-  }, [isTrainingMode, difficulty]);
 
   const difficultyLabel = difficulty === 'easy' ? '简单' : difficulty === 'normal' ? '普通' : '困难';
 
@@ -126,7 +102,7 @@ export default function ChimpTest() {
             <br />
             记住每个方块消失后，按数字从小到大依次点击。
           </p>
-          <DifficultySelector selected={difficulty} onSelect={handleDifficultySelect} testColor={test.color} />
+          <DifficultySelector selected={difficulty} onSelect={selectDifficulty} testColor={test.color} />
         </div>
       )}
 
@@ -204,7 +180,7 @@ export default function ChimpTest() {
         <ResultDisplay
           test={test}
           score={finalLevel}
-          onRetry={handleRestart}
+          onRetry={restart}
           stats={[
             { label: '到达关卡', value: `${level}` },
             { label: '记忆数字数', value: `${cells.length}` },

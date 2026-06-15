@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
 import { TESTS, DifficultyLevel, STROOP_DIFFICULTY } from '@/types';
-import { useScoreStore } from '@/store/useScoreStore';
+import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
 
@@ -47,69 +46,43 @@ function getGridCols(colorCount: number): string {
 
 export default function StroopTest() {
   const test = TESTS.find((t) => t.id === 'stroop')!;
-  const [phase, setPhase] = useState<Phase>('select-difficulty');
-  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(45);
   const [question, setQuestion] = useState<Question | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
   const feedbackRef = useRef<number | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const updateScore = useScoreStore((s) => s.updateScore);
-  const [searchParams] = useSearchParams();
-  const isTrainingMode = searchParams.get('training') === '1';
 
-  const config = difficulty ? STROOP_DIFFICULTY[difficulty] : STROOP_DIFFICULTY.normal;
+  const { phase, setPhase, difficulty, config, startTimer, finishTest, restart, selectDifficulty, timeLeft, startCountdown } =
+    useTestFlow<Phase, typeof STROOP_DIFFICULTY.normal>({
+      testId: 'stroop',
+      difficultyConfig: STROOP_DIFFICULTY,
+      onReset: () => {
+        setScore(0);
+        setCorrectCount(0);
+        setWrongCount(0);
+        setQuestion(null);
+      },
+    });
+
   const colors = ALL_COLORS.slice(0, config.colorCount);
   const colorNamesCN = ALL_COLOR_NAMES_CN.slice(0, config.colorCount);
 
-  const handleDifficultySelect = useCallback((level: DifficultyLevel) => {
-    setDifficulty(level);
-    setPhase('idle');
-  }, []);
-
-  useEffect(() => {
-    if (isTrainingMode && phase === 'select-difficulty') {
-      setDifficulty('normal');
-      setPhase('idle');
-    }
-  }, [isTrainingMode, phase]);
-
   const startTest = useCallback(() => {
-    const cfg = difficulty ? STROOP_DIFFICULTY[difficulty] : STROOP_DIFFICULTY.normal;
+    startTimer();
+    startCountdown(config.timeLimit);
     setScore(0);
-    setTimeLeft(cfg.timeLimit);
     setCorrectCount(0);
     setWrongCount(0);
-    setQuestion(generateQuestion(cfg.colorCount));
+    setQuestion(generateQuestion(config.colorCount));
     setPhase('playing');
-
-    timerRef.current = window.setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, [difficulty]);
+  }, [config, setPhase, startTimer, startCountdown]);
 
   useEffect(() => {
     if (phase === 'playing' && timeLeft === 0) {
-      const cfg = difficulty ? STROOP_DIFFICULTY[difficulty] : STROOP_DIFFICULTY.normal;
-      updateScore('stroop', correctCount, cfg.timeLimit * 1000);
       setScore(correctCount);
-      setPhase('result');
+      finishTest(correctCount, config.timeLimit * 1000);
     }
-  }, [timeLeft, phase, correctCount, updateScore, difficulty]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+  }, [timeLeft, phase, correctCount, finishTest, config]);
 
   const handleAnswer = (colorId: number) => {
     if (!question || phase !== 'playing') return;
@@ -127,15 +100,6 @@ export default function StroopTest() {
     }, 100);
   };
 
-  const handleRestart = () => {
-    if (isTrainingMode) {
-      setPhase('idle');
-    } else {
-      setDifficulty(null);
-      setPhase('select-difficulty');
-    }
-  };
-
   return (
     <TestLayout test={test}>
       <div className="glass-card p-6 md:p-8">
@@ -143,7 +107,7 @@ export default function StroopTest() {
           <div className="text-center">
             <DifficultySelector
               selected={difficulty}
-              onSelect={handleDifficultySelect}
+              onSelect={selectDifficulty}
               testColor={test.color}
             />
           </div>
@@ -258,7 +222,7 @@ export default function StroopTest() {
           <ResultDisplay
             test={test}
             score={score}
-            onRetry={handleRestart}
+            onRetry={restart}
             stats={[
               { label: '难度', value: DIFFICULTY_LABEL[difficulty!] },
               { label: '正确数', value: `${correctCount}` },
