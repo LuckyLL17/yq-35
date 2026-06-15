@@ -1,31 +1,33 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
-import { TESTS } from '@/types';
+import DifficultySelector from '@/components/DifficultySelector';
+import { TESTS, DifficultyLevel, MATH_DIFFICULTY, DIFFICULTY_OPTIONS, type MathDifficultyConfig } from '@/types';
 import { useScoreStore } from '@/store/useScoreStore';
 
-type Phase = 'idle' | 'playing' | 'result';
+type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
 
 interface Question {
   a: number;
   b: number;
-  op: '+' | '-' | '×';
+  op: '+' | '-' | '×' | '÷';
   answer: number;
 }
 
-function generateQuestion(difficulty: number): Question {
-  const ops: ('+' | '-' | '×')[] = difficulty < 10 ? ['+', '-'] : ['+', '-', '×'];
-  const op = ops[Math.floor(Math.random() * ops.length)];
+function generateQuestion(config: MathDifficultyConfig): Question {
+  const op = config.ops[Math.floor(Math.random() * config.ops.length)];
   let a: number, b: number, answer: number;
 
-  const max = Math.min(20 + difficulty * 3, 99);
-
-  if (op === '+') {
-    a = Math.floor(Math.random() * max) + 1;
-    b = Math.floor(Math.random() * max) + 1;
+  if (op === '÷') {
+    b = Math.floor(Math.random() * 11) + 2;
+    answer = Math.floor(Math.random() * Math.floor(config.maxBase / b)) + 1;
+    a = answer * b;
+  } else if (op === '+') {
+    a = Math.floor(Math.random() * config.maxBase) + 1;
+    b = Math.floor(Math.random() * config.maxBase) + 1;
     answer = a + b;
   } else if (op === '-') {
-    a = Math.floor(Math.random() * max) + 1;
+    a = Math.floor(Math.random() * config.maxBase) + 1;
     b = Math.floor(Math.random() * a) + 1;
     answer = a - b;
   } else {
@@ -39,23 +41,32 @@ function generateQuestion(difficulty: number): Question {
 
 export default function MathSpeed() {
   const test = TESTS.find((t) => t.id === 'math-speed')!;
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [phase, setPhase] = useState<Phase>('select-difficulty');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
   const [question, setQuestion] = useState<Question | null>(null);
   const [input, setInput] = useState('');
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
-  const [difficulty, setDifficulty] = useState(1);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
   const updateScore = useScoreStore((s) => s.updateScore);
 
+  const config = difficulty ? MATH_DIFFICULTY[difficulty] : null;
+
+  const handleDifficultySelect = (level: DifficultyLevel) => {
+    const cfg = MATH_DIFFICULTY[level];
+    setDifficulty(level);
+    setTimeLeft(cfg.timeLimit);
+    setPhase('idle');
+  };
+
   const startTest = useCallback(() => {
-    setTimeLeft(60);
+    if (!config) return;
+    setTimeLeft(config.timeLimit);
     setCorrectCount(0);
     setWrongCount(0);
-    setDifficulty(1);
-    setQuestion(generateQuestion(1));
+    setQuestion(generateQuestion(config));
     setInput('');
     setPhase('playing');
 
@@ -70,14 +81,15 @@ export default function MathSpeed() {
     }, 1000);
 
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, []);
+  }, [config]);
 
   useEffect(() => {
     if (phase === 'playing' && timeLeft === 0) {
-      updateScore('math-speed', correctCount, 60000);
+      const timeLimitMs = (config?.timeLimit ?? 60) * 1000;
+      updateScore('math-speed', correctCount, timeLimitMs);
       setPhase('result');
     }
-  }, [timeLeft, phase, correctCount, updateScore]);
+  }, [timeLeft, phase, correctCount, updateScore, config]);
 
   useEffect(() => {
     return () => {
@@ -88,33 +100,71 @@ export default function MathSpeed() {
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      if (!question || !input) return;
+      if (!question || !input || !config) return;
 
       const userAnswer = parseInt(input, 10);
       if (userAnswer === question.answer) {
-        setCorrectCount((c) => {
-          const nc = c + 1;
-          setDifficulty(Math.floor(nc / 5) + 1);
-          return nc;
-        });
+        setCorrectCount((c) => c + 1);
       } else {
         setWrongCount((w) => w + 1);
       }
-      setQuestion(generateQuestion(difficulty));
+      setQuestion(generateQuestion(config));
       setInput('');
     },
-    [question, input, difficulty],
+    [question, input, config],
   );
+
+  const handleRestart = () => {
+    setDifficulty(null);
+    setPhase('select-difficulty');
+  };
+
+  const difficultyLabel = difficulty
+    ? DIFFICULTY_OPTIONS.find((d) => d.level === difficulty)?.name ?? ''
+    : '';
+
+  const diffOpt = difficulty ? DIFFICULTY_OPTIONS.find((d) => d.level === difficulty) : null;
 
   return (
     <TestLayout test={test}>
       <div className="glass-card p-6 md:p-8">
-        {phase === 'idle' && (
+        {phase === 'select-difficulty' && (
           <div className="text-center">
-            <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
-              在 60 秒内尽可能多地计算数学题。
+            <p className="text-white/60 mb-6 max-w-lg mx-auto leading-relaxed">
+              选择一个难度等级开始速算测试。
               <br />
-              答对越多难度会逐渐增加。输入答案后按回车提交。
+              在限定时间内尽可能多地计算数学题，输入答案后按回车提交。
+            </p>
+            <DifficultySelector
+              selected={difficulty}
+              onSelect={handleDifficultySelect}
+              testColor={test.color}
+            />
+          </div>
+        )}
+
+        {phase === 'idle' && difficulty && (
+          <div className="text-center">
+            <div className="mb-4">
+              <span
+                className="inline-block px-3 py-1 rounded-full text-xs font-bold"
+                style={{
+                  backgroundColor: `${diffOpt!.color}20`,
+                  border: `1px solid ${diffOpt!.color}40`,
+                  color: diffOpt!.color,
+                }}
+              >
+                {diffOpt!.name}
+              </span>
+            </div>
+            <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
+              在 {config!.timeLimit} 秒内尽可能多地计算数学题。
+              <br />
+              {difficulty === 'easy' && '仅包含加法和减法运算。'}
+              {difficulty === 'normal' && '包含加法、减法和乘法运算。'}
+              {difficulty === 'hard' && '包含加法、减法、乘法和除法运算。'}
+              <br />
+              输入答案后按回车提交。
             </p>
             <button onClick={startTest} className="btn-primary">
               开始测试
@@ -122,7 +172,7 @@ export default function MathSpeed() {
           </div>
         )}
 
-        {phase === 'playing' && question && (
+        {phase === 'playing' && question && difficulty && (
           <div>
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-6">
@@ -134,11 +184,17 @@ export default function MathSpeed() {
                   <div className="text-xs text-white/40">正确</div>
                   <div className="font-display font-bold text-3xl text-neon-green">{correctCount}</div>
                 </div>
-                <div>
-                  <div className="text-xs text-white/40">难度</div>
-                  <div className="font-display font-bold text-3xl text-neon-cyan">{difficulty}</div>
-                </div>
               </div>
+              <span
+                className="px-3 py-1 rounded-full text-xs font-bold"
+                style={{
+                  backgroundColor: `${diffOpt!.color}20`,
+                  border: `1px solid ${diffOpt!.color}40`,
+                  color: diffOpt!.color,
+                }}
+              >
+                {diffOpt!.name}
+              </span>
             </div>
 
             <form onSubmit={handleSubmit} className="text-center">
@@ -166,12 +222,12 @@ export default function MathSpeed() {
           <ResultDisplay
             test={test}
             score={correctCount}
-            onRetry={startTest}
+            onRetry={handleRestart}
             stats={[
+              { label: '难度', value: difficultyLabel },
               { label: '正确数', value: `${correctCount}` },
               { label: '错误数', value: `${wrongCount}` },
-              { label: '达到难度', value: `${difficulty}` },
-              { label: '用时', value: '60s' },
+              { label: '用时', value: `${config?.timeLimit ?? 60}s` },
             ]}
           />
         )}

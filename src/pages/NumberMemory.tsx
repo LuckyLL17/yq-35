@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
-import { TESTS } from '@/types';
+import DifficultySelector from '@/components/DifficultySelector';
+import { TESTS, DifficultyLevel, NUMBER_MEMORY_DIFFICULTY, DIFFICULTY_OPTIONS } from '@/types';
 import { useScoreStore } from '@/store/useScoreStore';
 
-type Phase = 'idle' | 'showing' | 'input' | 'result';
+type Phase = 'select-difficulty' | 'idle' | 'showing' | 'input' | 'result';
 
 function generateNumber(length: number): string {
   let result = '';
@@ -16,7 +17,8 @@ function generateNumber(length: number): string {
 
 export default function NumberMemory() {
   const test = TESTS.find((t) => t.id === 'number-memory')!;
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [phase, setPhase] = useState<Phase>('select-difficulty');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [level, setLevel] = useState(3);
   const [number, setNumber] = useState('');
   const [input, setInput] = useState('');
@@ -29,7 +31,8 @@ export default function NumberMemory() {
   const updateScore = useScoreStore((s) => s.updateScore);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const getShowDuration = (lvl: number) => 1000 + lvl * 400;
+  const config = difficulty ? NUMBER_MEMORY_DIFFICULTY[difficulty] : NUMBER_MEMORY_DIFFICULTY.normal;
+  const getShowDuration = (lvl: number) => config.showDurationBase + lvl * config.showDurationPerDigit;
 
   const startTest = useCallback((lvl: number) => {
     if (testStartRef.current === 0) {
@@ -56,7 +59,7 @@ export default function NumberMemory() {
       setPhase('input');
       setTimeout(() => inputRef.current?.focus(), 100);
     }, getShowDuration(lvl));
-  }, []);
+  }, [config]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -87,75 +90,141 @@ export default function NumberMemory() {
   }, []);
 
   const handleRestart = () => {
+    setDifficulty(null);
     setLevel(3);
-    setPhase('idle');
+    setPhase('select-difficulty');
   };
 
   return (
     <TestLayout test={test}>
       <div className={`glass-card p-8 md:p-12 ${shaking ? 'animate-shake' : ''}`}>
-        {phase === 'idle' && (
+        {phase === 'select-difficulty' && (
           <div className="text-center">
-            <div className="mb-6">
-              <div className="font-display text-6xl md:text-8xl mb-4 text-neon-purple">{level}</div>
-              <p className="text-white/50">起始位数</p>
-            </div>
             <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
               屏幕上会短暂显示一串数字，请在数字消失后输入你记忆中的数字。
               <br />
               每次答对会增加一位数字。
             </p>
-            <button onClick={() => startTest(level)} className="btn-primary">
-              开始测试
-            </button>
-          </div>
-        )}
-
-        {phase === 'showing' && (
-          <div className="text-center py-8">
-            <div className="mb-6">
-              <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-neon-purple transition-all duration-50"
-                  style={{ width: `${(showTime / getShowDuration(level)) * 100}%` }}
-                />
-              </div>
-            </div>
-            <div
-              className="font-display font-black tracking-widest text-neon-purple animate-fade-in"
-              style={{
-                fontSize: level <= 6 ? 'clamp(3rem, 12vw, 8rem)' : 'clamp(2rem, 8vw, 5rem)',
-                textShadow: '0 0 40px rgba(168, 85, 247, 0.4)',
+            <DifficultySelector
+              selected={difficulty}
+              onSelect={(lvl) => {
+                setDifficulty(lvl);
+                const cfg = NUMBER_MEMORY_DIFFICULTY[lvl];
+                setLevel(cfg.startLevel);
+                setPhase('idle');
               }}
-            >
-              {number}
-            </div>
-            <p className="mt-4 text-white/40">记住这串数字...</p>
+              testColor={test.color}
+            />
           </div>
         )}
 
-        {phase === 'input' && (
-          <form onSubmit={handleSubmit} className="text-center max-w-md mx-auto">
-            <p className="text-white/60 mb-6">第 {level} 位数字</p>
-            <input
-              ref={inputRef}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={input}
-              onChange={(e) => setInput(e.target.value.replace(/[^0-9]/g, ''))}
-              className="w-full text-center font-mono text-4xl md:text-5xl font-bold bg-white/5 border border-white/20 focus:border-neon-purple/50 rounded-xl py-6 px-4 outline-none focus:shadow-[0_0_30px_rgba(168,85,247,0.2)] transition-all"
-              placeholder="输入数字..."
-              autoFocus
-            />
-            <p className="mt-6 text-white/40 text-sm">
-              你认为正确的数字是: {number.length} 位
-            </p>
-            <button type="submit" className="btn-primary mt-6" disabled={input.length === 0}>
-              确认
-            </button>
-          </form>
-        )}
+        {phase === 'idle' && difficulty && (() => {
+          const diffOpt = DIFFICULTY_OPTIONS.find((d) => d.level === difficulty)!;
+          return (
+            <div className="text-center">
+              <div className="mb-4">
+                <span
+                  className="inline-block px-3 py-1 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: `${diffOpt.color}20`,
+                    border: `1px solid ${diffOpt.color}40`,
+                    color: diffOpt.color,
+                  }}
+                >
+                  {diffOpt.name}
+                </span>
+              </div>
+              <div className="mb-6">
+                <div className="font-display text-6xl md:text-8xl mb-4 text-neon-purple">{level}</div>
+                <p className="text-white/50">起始位数</p>
+              </div>
+              <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
+                屏幕上会短暂显示一串数字，请在数字消失后输入你记忆中的数字。
+                <br />
+                每次答对会增加一位数字。
+              </p>
+              <button onClick={() => startTest(level)} className="btn-primary">
+                开始测试
+              </button>
+            </div>
+          );
+        })()}
+
+        {phase === 'showing' && difficulty && (() => {
+          const diffOpt = DIFFICULTY_OPTIONS.find((d) => d.level === difficulty)!;
+          return (
+            <div className="text-center py-8">
+              <div className="mb-2">
+                <span
+                  className="inline-block px-3 py-1 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: `${diffOpt.color}20`,
+                    border: `1px solid ${diffOpt.color}40`,
+                    color: diffOpt.color,
+                  }}
+                >
+                  {diffOpt.name}
+                </span>
+              </div>
+              <div className="mb-6">
+                <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-neon-purple transition-all duration-50"
+                    style={{ width: `${(showTime / getShowDuration(level)) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div
+                className="font-display font-black tracking-widest text-neon-purple animate-fade-in"
+                style={{
+                  fontSize: level <= 6 ? 'clamp(3rem, 12vw, 8rem)' : 'clamp(2rem, 8vw, 5rem)',
+                  textShadow: '0 0 40px rgba(168, 85, 247, 0.4)',
+                }}
+              >
+                {number}
+              </div>
+              <p className="mt-4 text-white/40">记住这串数字...</p>
+            </div>
+          );
+        })()}
+
+        {phase === 'input' && difficulty && (() => {
+          const diffOpt = DIFFICULTY_OPTIONS.find((d) => d.level === difficulty)!;
+          return (
+            <form onSubmit={handleSubmit} className="text-center max-w-md mx-auto">
+              <div className="mb-4">
+                <span
+                  className="inline-block px-3 py-1 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: `${diffOpt.color}20`,
+                    border: `1px solid ${diffOpt.color}40`,
+                    color: diffOpt.color,
+                  }}
+                >
+                  {diffOpt.name}
+                </span>
+              </div>
+              <p className="text-white/60 mb-6">第 {level} 位数字</p>
+              <input
+                ref={inputRef}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={input}
+                onChange={(e) => setInput(e.target.value.replace(/[^0-9]/g, ''))}
+                className="w-full text-center font-mono text-4xl md:text-5xl font-bold bg-white/5 border border-white/20 focus:border-neon-purple/50 rounded-xl py-6 px-4 outline-none focus:shadow-[0_0_30px_rgba(168,85,247,0.2)] transition-all"
+                placeholder="输入数字..."
+                autoFocus
+              />
+              <p className="mt-6 text-white/40 text-sm">
+                你认为正确的数字是: {number.length} 位
+              </p>
+              <button type="submit" className="btn-primary mt-6" disabled={input.length === 0}>
+                确认
+              </button>
+            </form>
+          );
+        })()}
 
         {phase === 'result' && (
           <ResultDisplay
@@ -163,6 +232,7 @@ export default function NumberMemory() {
             score={finalLevel}
             onRetry={handleRestart}
             stats={[
+              { label: '难度', value: difficulty ? DIFFICULTY_OPTIONS.find((d) => d.level === difficulty)?.name ?? '' : '' },
               { label: '显示数字', value: number },
               { label: '你的答案', value: input || '—' },
               { label: '当前关卡', value: `${level} 位` },

@@ -1,16 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
-import { TESTS } from '@/types';
+import DifficultySelector from '@/components/DifficultySelector';
+import { TESTS, DifficultyLevel, SEQUENCE_DIFFICULTY } from '@/types';
 import { useScoreStore } from '@/store/useScoreStore';
 
-type Phase = 'idle' | 'showing' | 'playing' | 'result';
+type Phase = 'select-difficulty' | 'idle' | 'showing' | 'playing' | 'result';
 
-const COLORS = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b'];
+const ALL_COLORS = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b', '#a855f7', '#ec4899'];
+
+const DIFFICULTY_LABEL: Record<DifficultyLevel, string> = {
+  easy: '简单',
+  normal: '普通',
+  hard: '困难',
+};
 
 export default function SequenceMemory() {
   const test = TESTS.find((t) => t.id === 'sequence-memory')!;
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [phase, setPhase] = useState<Phase>('select-difficulty');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [sequence, setSequence] = useState<number[]>([]);
   const [playerIndex, setPlayerIndex] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -20,36 +28,45 @@ export default function SequenceMemory() {
   const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
 
+  const config = difficulty ? SEQUENCE_DIFFICULTY[difficulty] : SEQUENCE_DIFFICULTY.normal;
+  const colors = ALL_COLORS.slice(0, config.colorCount);
+
   const clearTimers = useCallback(() => {
     timeoutRefs.current.forEach((id) => clearTimeout(id));
     timeoutRefs.current = [];
   }, []);
 
-  const addRound = useCallback((seq: number[]) => {
-    const next = [...seq, Math.floor(Math.random() * 4)];
-    return next;
-  }, []);
+  const addRound = useCallback(
+    (seq: number[]) => {
+      const next = [...seq, Math.floor(Math.random() * config.colorCount)];
+      return next;
+    },
+    [config.colorCount],
+  );
 
-  const playSequence = useCallback((seq: number[]) => {
-    setPhase('showing');
-    clearTimers();
+  const playSequence = useCallback(
+    (seq: number[]) => {
+      setPhase('showing');
+      clearTimers();
 
-    seq.forEach((colorIdx, i) => {
-      const onId = window.setTimeout(() => {
-        setShowingIndex(colorIdx);
-      }, i * 600 + 300);
-      const offId = window.setTimeout(() => {
-        setShowingIndex(null);
-      }, i * 600 + 300 + 400);
-      timeoutRefs.current.push(onId, offId);
-    });
+      seq.forEach((colorIdx, i) => {
+        const onId = window.setTimeout(() => {
+          setShowingIndex(colorIdx);
+        }, i * config.showInterval + 300);
+        const offId = window.setTimeout(() => {
+          setShowingIndex(null);
+        }, i * config.showInterval + 300 + config.showDuration);
+        timeoutRefs.current.push(onId, offId);
+      });
 
-    const endId = window.setTimeout(() => {
-      setPhase('playing');
-      setPlayerIndex(0);
-    }, seq.length * 600 + 500);
-    timeoutRefs.current.push(endId);
-  }, [clearTimers]);
+      const endId = window.setTimeout(() => {
+        setPhase('playing');
+        setPlayerIndex(0);
+      }, seq.length * config.showInterval + 500);
+      timeoutRefs.current.push(endId);
+    },
+    [clearTimers, config.showInterval, config.showDuration],
+  );
 
   const startTest = useCallback(() => {
     clearTimers();
@@ -92,9 +109,40 @@ export default function SequenceMemory() {
     [phase, sequence, playerIndex, addRound, playSequence, updateScore],
   );
 
+  const handleDifficultySelect = useCallback((level: DifficultyLevel) => {
+    setDifficulty(level);
+    setPhase('idle');
+  }, []);
+
+  const handleRestart = useCallback(() => {
+    clearTimers();
+    setDifficulty(null);
+    setPhase('select-difficulty');
+    setSequence([]);
+    setPlayerIndex(0);
+    setActiveIndex(null);
+    setFinalScore(0);
+    setShowingIndex(null);
+  }, [clearTimers]);
+
   return (
     <TestLayout test={test}>
       <div className="glass-card p-6 md:p-8">
+      {phase === 'select-difficulty' && (
+        <div className="text-center">
+          <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
+            观察灯光闪烁的顺序，然后按相同顺序点击。
+            <br />
+            每轮会增加一个新的颜色。
+          </p>
+          <DifficultySelector
+            selected={difficulty}
+            onSelect={handleDifficultySelect}
+            testColor={test.color}
+          />
+        </div>
+      )}
+
       {phase === 'idle' && (
         <div className="text-center">
           <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
@@ -115,6 +163,17 @@ export default function SequenceMemory() {
               <span className="text-white/40">轮次:</span>
               <span className="font-bold text-neon-cyan ml-2">{sequence.length}</span>
             </div>
+            {difficulty && (
+              <span
+                className="text-xs font-display font-bold px-2 py-1 rounded-full"
+                style={{
+                  color: SEQUENCE_DIFFICULTY[difficulty].colorCount === 6 ? '#10b981' : difficulty === 'hard' ? '#ef4444' : '#00d4ff',
+                  border: '1px solid currentColor',
+                }}
+              >
+                {DIFFICULTY_LABEL[difficulty]}
+              </span>
+            )}
             {phase === 'playing' && (
               <div className="text-white/40 text-sm">
                 输入: {playerIndex}/{sequence.length}
@@ -127,8 +186,12 @@ export default function SequenceMemory() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 aspect-square">
-            {COLORS.map((color, idx) => {
+          <div
+            className={`grid gap-4 ${
+              config.colorCount === 6 ? 'grid-cols-3' : 'grid-cols-2'
+            } aspect-square`}
+          >
+            {colors.map((color, idx) => {
               const isActive =
                 showingIndex === idx || activeIndex === idx;
               return (
@@ -155,9 +218,10 @@ export default function SequenceMemory() {
         <ResultDisplay
           test={test}
           score={finalScore}
-          onRetry={startTest}
+          onRetry={handleRestart}
           stats={[
             { label: '序列长度', value: `${sequence.length}` },
+            ...(difficulty ? [{ label: '难度', value: DIFFICULTY_LABEL[difficulty] }] : []),
           ]}
         />
       )}

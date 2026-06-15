@@ -46,6 +46,171 @@ export const REACTION_MODES: ReactionModeInfo[] = [
   },
 ];
 
+export type DifficultyLevel = 'easy' | 'normal' | 'hard';
+
+export interface DifficultyOption {
+  level: DifficultyLevel;
+  name: string;
+  description: string;
+  color: string;
+  icon: string;
+}
+
+export const DIFFICULTY_OPTIONS: DifficultyOption[] = [
+  {
+    level: 'easy',
+    name: '简单',
+    description: '适合初次尝试，降低难度参数',
+    color: '#10b981',
+    icon: 'shield',
+  },
+  {
+    level: 'normal',
+    name: '普通',
+    description: '标准难度，公平测试基准',
+    color: '#00d4ff',
+    icon: 'swords',
+  },
+  {
+    level: 'hard',
+    name: '困难',
+    description: '极限挑战，考验真实能力',
+    color: '#ef4444',
+    icon: 'flame',
+  },
+];
+
+export interface ReactionDifficultyConfig {
+  rounds: number;
+  minDelay: number;
+  maxDelay: number;
+  fakeSignals: boolean;
+}
+
+export interface NumberMemoryDifficultyConfig {
+  startLevel: number;
+  showDurationBase: number;
+  showDurationPerDigit: number;
+}
+
+export interface TypingDifficultyConfig {
+  timeLimit: number;
+  textPool: string[];
+}
+
+export interface AimDifficultyConfig {
+  targetCount: number;
+  targetSize: number;
+  movingTargets: boolean;
+}
+
+export interface ChimpDifficultyConfig {
+  gridSize: number;
+  startLevel: number;
+  showTimeBase: number;
+  showTimePerCell: number;
+}
+
+export interface ColorVisionDifficultyConfig {
+  lives: number;
+  diffMultiplier: number;
+}
+
+export interface SequenceDifficultyConfig {
+  colorCount: number;
+  showInterval: number;
+  showDuration: number;
+}
+
+export interface StroopDifficultyConfig {
+  timeLimit: number;
+  colorCount: number;
+}
+
+export interface MathDifficultyConfig {
+  timeLimit: number;
+  ops: ('+' | '-' | '×' | '÷')[];
+  maxBase: number;
+}
+
+export const REACTION_DIFFICULTY: Record<DifficultyLevel, ReactionDifficultyConfig> = {
+  easy: { rounds: 3, minDelay: 1500, maxDelay: 4000, fakeSignals: false },
+  normal: { rounds: 5, minDelay: 1000, maxDelay: 4000, fakeSignals: false },
+  hard: { rounds: 5, minDelay: 500, maxDelay: 2500, fakeSignals: true },
+};
+
+export const NUMBER_MEMORY_DIFFICULTY: Record<DifficultyLevel, NumberMemoryDifficultyConfig> = {
+  easy: { startLevel: 3, showDurationBase: 1500, showDurationPerDigit: 600 },
+  normal: { startLevel: 3, showDurationBase: 1000, showDurationPerDigit: 400 },
+  hard: { startLevel: 5, showDurationBase: 800, showDurationPerDigit: 250 },
+};
+
+export const TYPING_DIFFICULTY: Record<DifficultyLevel, TypingDifficultyConfig> = {
+  easy: {
+    timeLimit: 90,
+    textPool: [
+      'The quick brown fox jumps over the lazy dog. The sun is bright and the birds are singing in the tall green trees.',
+      'A good day starts with a smile. Keep moving forward and never look back. Life is short so make it count.',
+      'The rain falls softly on the roof. Cats sleep by the fire. Stars come out at night to light the dark sky.',
+    ],
+  },
+  normal: {
+    timeLimit: 60,
+    textPool: [
+      'The quick brown fox jumps over the lazy dog while the sun sets behind the mountains, painting the sky in shades of orange and pink.',
+      'Programming is the art of telling another human what one wants the computer to do, and every line of code is a step towards solving a problem.',
+      'In the middle of difficulty lies opportunity, and those who persist through challenges often discover strengths they never knew they had.',
+      'The only way to do great work is to love what you do, and if you have not found it yet, keep looking and never settle for less.',
+      'Success is not final and failure is not fatal, it is the courage to continue that counts in the long journey of life and discovery.',
+      'Technology is best when it brings people together, creating connections that transcend borders and build bridges between different cultures.',
+    ],
+  },
+  hard: {
+    timeLimit: 30,
+    textPool: [
+      'Puzzlingly, the juxtaposition of extraordinary phenomena—quantum entanglement, gravitational waves, & dark energy—challenges our fundamental comprehension of the universe\'s architecture.',
+      'The juxtaposition of kaleidoscopic cinematography & meticulously choreographed sequences unequivocally demonstrates the director\'s unorthodox yet mesmerizing aesthetic vision.',
+      'Cryptographic algorithms implementing asynchronous key-exchange protocols utilize extraordinarily sophisticated mathematical transformations to ensure unbreakable encryption.',
+    ],
+  },
+};
+
+export const AIM_DIFFICULTY: Record<DifficultyLevel, AimDifficultyConfig> = {
+  easy: { targetCount: 20, targetSize: 70, movingTargets: false },
+  normal: { targetCount: 30, targetSize: 60, movingTargets: false },
+  hard: { targetCount: 30, targetSize: 40, movingTargets: true },
+};
+
+export const CHIMP_DIFFICULTY: Record<DifficultyLevel, ChimpDifficultyConfig> = {
+  easy: { gridSize: 5, startLevel: 4, showTimeBase: 1000, showTimePerCell: 400 },
+  normal: { gridSize: 4, startLevel: 4, showTimeBase: 800, showTimePerCell: 300 },
+  hard: { gridSize: 4, startLevel: 6, showTimeBase: 500, showTimePerCell: 150 },
+};
+
+export const COLOR_VISION_DIFFICULTY: Record<DifficultyLevel, ColorVisionDifficultyConfig> = {
+  easy: { lives: 5, diffMultiplier: 1.5 },
+  normal: { lives: 3, diffMultiplier: 1.0 },
+  hard: { lives: 1, diffMultiplier: 0.6 },
+};
+
+export const SEQUENCE_DIFFICULTY: Record<DifficultyLevel, SequenceDifficultyConfig> = {
+  easy: { colorCount: 6, showInterval: 800, showDuration: 500 },
+  normal: { colorCount: 4, showInterval: 600, showDuration: 400 },
+  hard: { colorCount: 4, showInterval: 400, showDuration: 250 },
+};
+
+export const STROOP_DIFFICULTY: Record<DifficultyLevel, StroopDifficultyConfig> = {
+  easy: { timeLimit: 60, colorCount: 3 },
+  normal: { timeLimit: 45, colorCount: 4 },
+  hard: { timeLimit: 30, colorCount: 6 },
+};
+
+export const MATH_DIFFICULTY: Record<DifficultyLevel, MathDifficultyConfig> = {
+  easy: { timeLimit: 90, ops: ['+', '-'], maxBase: 30 },
+  normal: { timeLimit: 60, ops: ['+', '-', '×'], maxBase: 50 },
+  hard: { timeLimit: 60, ops: ['+', '-', '×', '÷'], maxBase: 99 },
+};
+
 export type TestId =
   | 'reaction'
   | 'number-memory'

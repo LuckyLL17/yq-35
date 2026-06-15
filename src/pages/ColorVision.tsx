@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
-import { TESTS } from '@/types';
+import DifficultySelector from '@/components/DifficultySelector';
+import { TESTS, DIFFICULTY_OPTIONS, DifficultyLevel, COLOR_VISION_DIFFICULTY } from '@/types';
 import { useScoreStore } from '@/store/useScoreStore';
 
-type Phase = 'idle' | 'playing' | 'result';
+type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   let r, g, b;
@@ -28,20 +29,21 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
 }
 
-function getGridSize(level: number): { size: number; diff: number } {
-  if (level <= 2) return { size: 2, diff: 15 };
-  if (level <= 4) return { size: 3, diff: 12 };
-  if (level <= 6) return { size: 3, diff: 10 };
-  if (level <= 9) return { size: 4, diff: 8 };
-  if (level <= 12) return { size: 4, diff: 6 };
-  if (level <= 16) return { size: 5, diff: 5 };
-  if (level <= 20) return { size: 5, diff: 4 };
-  return { size: 6, diff: 3 };
+function getGridSize(level: number, diffMultiplier: number): { size: number; diff: number } {
+  if (level <= 2) return { size: 2, diff: Math.max(1, Math.round(15 * diffMultiplier)) };
+  if (level <= 4) return { size: 3, diff: Math.max(1, Math.round(12 * diffMultiplier)) };
+  if (level <= 6) return { size: 3, diff: Math.max(1, Math.round(10 * diffMultiplier)) };
+  if (level <= 9) return { size: 4, diff: Math.max(1, Math.round(8 * diffMultiplier)) };
+  if (level <= 12) return { size: 4, diff: Math.max(1, Math.round(6 * diffMultiplier)) };
+  if (level <= 16) return { size: 5, diff: Math.max(1, Math.round(5 * diffMultiplier)) };
+  if (level <= 20) return { size: 5, diff: Math.max(1, Math.round(4 * diffMultiplier)) };
+  return { size: 6, diff: Math.max(1, Math.round(3 * diffMultiplier)) };
 }
 
 export default function ColorVision() {
   const test = TESTS.find((t) => t.id === 'color-vision')!;
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [phase, setPhase] = useState<Phase>('select-difficulty');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [level, setLevel] = useState(1);
   const [diffIdx, setDiffIdx] = useState(0);
   const [baseColor, setBaseColor] = useState('#ffffff');
@@ -50,24 +52,39 @@ export default function ColorVision() {
   const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
 
-  const generateLevel = useCallback((lvl: number) => {
-    const { size } = getGridSize(lvl);
-    const total = size * size;
-    const h = Math.random();
-    const s = 0.5 + Math.random() * 0.3;
-    const l = 0.35 + Math.random() * 0.3;
-    const [r, g, b] = hslToRgb(h, s, l);
-    setBaseColor(`rgb(${r}, ${g}, ${b})`);
-    setDiffIdx(Math.floor(Math.random() * total));
-  }, []);
+  const config = difficulty ? COLOR_VISION_DIFFICULTY[difficulty] : COLOR_VISION_DIFFICULTY.normal;
+
+  const generateLevel = useCallback(
+    (lvl: number) => {
+      const { size } = getGridSize(lvl, config.diffMultiplier);
+      const total = size * size;
+      const h = Math.random();
+      const s = 0.5 + Math.random() * 0.3;
+      const l = 0.35 + Math.random() * 0.3;
+      const [r, g, b] = hslToRgb(h, s, l);
+      setBaseColor(`rgb(${r}, ${g}, ${b})`);
+      setDiffIdx(Math.floor(Math.random() * total));
+    },
+    [config.diffMultiplier],
+  );
 
   const startTest = useCallback(() => {
     testStartRef.current = Date.now();
     setLevel(1);
-    setLives(3);
+    setLives(config.lives);
     generateLevel(1);
     setPhase('playing');
-  }, [generateLevel]);
+  }, [generateLevel, config.lives]);
+
+  const handleDifficultySelect = (lvl: DifficultyLevel) => {
+    setDifficulty(lvl);
+    setPhase('idle');
+  };
+
+  const handleRestart = () => {
+    setDifficulty(null);
+    setPhase('select-difficulty');
+  };
 
   const handleClick = useCallback(
     (idx: number) => {
@@ -91,11 +108,11 @@ export default function ColorVision() {
     [diffIdx, level, lives, generateLevel, updateScore],
   );
 
-  const { size } = getGridSize(level);
+  const { size } = getGridSize(level, config.diffMultiplier);
   const total = size * size;
 
   const getDifferentColor = () => {
-    const { diff } = getGridSize(level);
+    const { diff } = getGridSize(level, config.diffMultiplier);
     const match = baseColor.match(/\d+/g);
     if (!match) return baseColor;
     const [r, g, b] = match.map(Number);
@@ -104,15 +121,46 @@ export default function ColorVision() {
     return `rgb(${adjust(r)}, ${adjust(g)}, ${adjust(b)})`;
   };
 
+  const diffOpt = difficulty ? DIFFICULTY_OPTIONS.find((d) => d.level === difficulty) : null;
+
   return (
     <TestLayout test={test}>
       <div className="glass-card p-6 md:p-8">
-        {phase === 'idle' && (
+        {phase === 'select-difficulty' && (
           <div className="text-center">
             <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
               找出颜色不同的方块。
               <br />
-              共 3 条命，难度随关卡增加。
+              选择难度后开始测试。
+            </p>
+            <DifficultySelector
+              selected={difficulty}
+              onSelect={handleDifficultySelect}
+              testColor={test.color}
+            />
+          </div>
+        )}
+
+        {phase === 'idle' && (
+          <div className="text-center">
+            {diffOpt && (
+              <div className="mb-4">
+                <span
+                  className="inline-block px-3 py-1 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: `${diffOpt.color}20`,
+                    border: `1px solid ${diffOpt.color}40`,
+                    color: diffOpt.color,
+                  }}
+                >
+                  {diffOpt.name}
+                </span>
+              </div>
+            )}
+            <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
+              找出颜色不同的方块。
+              <br />
+              共 {config.lives} 条命，难度随关卡增加。
             </p>
             <button onClick={startTest} className="btn-primary">
               开始测试
@@ -126,9 +174,21 @@ export default function ColorVision() {
               <div className="flex items-center gap-4">
                 <span className="text-white/40">关卡:</span>
                 <span className="font-display font-bold text-2xl text-neon-orange">{level}</span>
+                {diffOpt && (
+                  <span
+                    className="px-2 py-0.5 rounded-full text-[11px] font-bold"
+                    style={{
+                      backgroundColor: `${diffOpt.color}20`,
+                      border: `1px solid ${diffOpt.color}40`,
+                      color: diffOpt.color,
+                    }}
+                  >
+                    {diffOpt.name}
+                  </span>
+                )}
               </div>
               <div className="flex gap-1">
-                {Array.from({ length: 3 }).map((_, i) => (
+                {Array.from({ length: config.lives }).map((_, i) => (
                   <span
                     key={i}
                     className={`text-2xl ${i < lives ? 'text-neon-red' : 'text-white/10'}`}
@@ -159,8 +219,11 @@ export default function ColorVision() {
           <ResultDisplay
             test={test}
             score={finalLevel}
-            onRetry={startTest}
-            stats={[{ label: '到达关卡', value: `${level}` }]}
+            onRetry={handleRestart}
+            stats={[
+              { label: '到达关卡', value: `${level}` },
+              ...(diffOpt ? [{ label: '难度', value: diffOpt.name }] : []),
+            ]}
           />
         )}
       </div>

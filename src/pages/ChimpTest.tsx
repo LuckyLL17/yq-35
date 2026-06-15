@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
-import { TESTS } from '@/types';
+import DifficultySelector from '@/components/DifficultySelector';
+import { TESTS, type DifficultyLevel, CHIMP_DIFFICULTY } from '@/types';
 import { useScoreStore } from '@/store/useScoreStore';
 
-type Phase = 'idle' | 'showing' | 'playing' | 'result';
+type Phase = 'select-difficulty' | 'idle' | 'showing' | 'playing' | 'result';
 
 interface Cell {
   x: number;
@@ -12,13 +13,13 @@ interface Cell {
   value: number;
 }
 
-function generateGrid(level: number): Cell[] {
+function generateGrid(level: number, gridSize: number): Cell[] {
   const positions = new Set<string>();
   const cells: Cell[] = [];
 
   while (positions.size < level) {
-    const x = Math.floor(Math.random() * 4);
-    const y = Math.floor(Math.random() * 4);
+    const x = Math.floor(Math.random() * gridSize);
+    const y = Math.floor(Math.random() * gridSize);
     const key = `${x}-${y}`;
     if (positions.has(key)) continue;
     positions.add(key);
@@ -30,7 +31,8 @@ function generateGrid(level: number): Cell[] {
 
 export default function ChimpTest() {
   const test = TESTS.find((t) => t.id === 'chimp')!;
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [phase, setPhase] = useState<Phase>('select-difficulty');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel | null>(null);
   const [level, setLevel] = useState(4);
   const [cells, setCells] = useState<Cell[]>([]);
   const [nextNum, setNextNum] = useState(1);
@@ -39,30 +41,33 @@ export default function ChimpTest() {
   const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
 
-  const startLevel = useCallback((lvl: number) => {
-    const grid = generateGrid(lvl);
+  const config = difficulty ? CHIMP_DIFFICULTY[difficulty] : CHIMP_DIFFICULTY.normal;
+
+  const startLevel = useCallback((lvl: number, gridSize: number, showTimeBase: number, showTimePerCell: number) => {
+    const grid = generateGrid(lvl, gridSize);
     setCells(grid);
     setNextNum(1);
     setPhase('showing');
 
-    const showTime = 800 + lvl * 300;
+    const showTime = showTimeBase + lvl * showTimePerCell;
     setTimeout(() => setPhase('playing'), showTime);
   }, []);
 
   const startTest = useCallback(() => {
     testStartRef.current = Date.now();
-    setLevel(4);
-    startLevel(4);
-  }, [startLevel]);
+    const cfg = CHIMP_DIFFICULTY[difficulty!];
+    setLevel(cfg.startLevel);
+    startLevel(cfg.startLevel, cfg.gridSize, cfg.showTimeBase, cfg.showTimePerCell);
+  }, [difficulty, startLevel]);
 
   const handleCellClick = (cell: Cell) => {
     if (phase !== 'playing') return;
 
     if (cell.value === nextNum) {
-      if (nextNum >= cells.length) {
+        if (nextNum >= cells.length) {
           const nextLvl = level + 1;
           setLevel(nextLvl);
-          setTimeout(() => startLevel(nextLvl), 300);
+          setTimeout(() => startLevel(nextLvl, config.gridSize, config.showTimeBase, config.showTimePerCell), 300);
         } else {
           setNextNum(nextNum + 1);
         }
@@ -77,9 +82,36 @@ export default function ChimpTest() {
       }
   };
 
+  const handleDifficultySelect = useCallback((lvl: DifficultyLevel) => {
+    setDifficulty(lvl);
+    setLevel(CHIMP_DIFFICULTY[lvl].startLevel);
+    setPhase('idle');
+  }, []);
+
+  const handleRestart = useCallback(() => {
+    setDifficulty(null);
+    setPhase('select-difficulty');
+  }, []);
+
+  const difficultyLabel = difficulty === 'easy' ? '简单' : difficulty === 'normal' ? '普通' : '困难';
+
   return (
     <TestLayout test={test}>
       <div className={`glass-card p-6 md:p-8 ${shaking ? 'animate-shake' : ''}`}>
+      {phase === 'select-difficulty' && (
+        <div className="text-center">
+          <p className="text-white/60 mb-2 font-display text-4xl font-bold text-neon-yellow mb-6">
+            黑猩猩测试
+          </p>
+          <p className="text-white/60 mb-8 max-w-md mx-auto leading-relaxed">
+            屏幕上会显示带有数字的方块。
+            <br />
+            记住每个方块消失后，按数字从小到大依次点击。
+          </p>
+          <DifficultySelector selected={difficulty} onSelect={handleDifficultySelect} testColor={test.color} />
+        </div>
+      )}
+
       {phase === 'idle' && (
         <div className="text-center">
           <p className="text-white/60 mb-2 font-display text-4xl font-bold text-neon-yellow mb-6">
@@ -99,9 +131,12 @@ export default function ChimpTest() {
       {(phase === 'showing' || phase === 'playing') && (
         <div>
           <div className="flex items-center justify-between mb-6">
-          <div className="font-display text-lg">
+          <div className="font-display text-lg flex items-center gap-2">
             <span className="text-white/40">关卡:</span>
             <span className="font-bold text-neon-yellow ml-2">{level}</span>
+            <span className="text-xs px-2 py-0.5 rounded-full border" style={{ borderColor: `${test.color}60`, color: test.color }}>
+              {difficultyLabel}
+            </span>
           </div>
           {phase === 'playing' && (
             <div className="text-white/40 text-sm">
@@ -115,11 +150,11 @@ export default function ChimpTest() {
           )}
         </div>
 
-        <div className="relative w-full aspect-[4/3] max-w-md mx-auto">
-          <div className="absolute inset-0 grid grid-cols-4 grid-rows-4 gap-2">
-            {Array.from({ length: 16 }).map((_, idx) => {
-              const x = idx % 4;
-              const y = Math.floor(idx / 4);
+        <div className="relative w-full aspect-square max-w-md mx-auto">
+          <div className={`absolute inset-0 grid gap-2`} style={{ gridTemplateColumns: `repeat(${config.gridSize}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${config.gridSize}, minmax(0, 1fr))` }}>
+            {Array.from({ length: config.gridSize * config.gridSize }).map((_, idx) => {
+              const x = idx % config.gridSize;
+              const y = Math.floor(idx / config.gridSize);
               const cell = cells.find((c) => c.x === x && c.y === y);
               const isShown = phase === 'showing' || (phase === 'playing' && cell && cell.value < nextNum);
               const isClickable = phase === 'playing' && cell && cell.value >= nextNum;
@@ -151,10 +186,11 @@ export default function ChimpTest() {
         <ResultDisplay
           test={test}
           score={finalLevel}
-          onRetry={startTest}
+          onRetry={handleRestart}
           stats={[
             { label: '到达关卡', value: `${level}` },
             { label: '记忆数字数', value: `${cells.length}` },
+            { label: '难度', value: difficultyLabel },
           ]}
         />
       )}
