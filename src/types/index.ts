@@ -1,3 +1,51 @@
+export type ReactionMode = 'visual' | 'auditory' | 'tactile' | 'mixed' | 'random';
+
+export interface ReactionModeInfo {
+  id: ReactionMode;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+}
+
+export const REACTION_MODES: ReactionModeInfo[] = [
+  {
+    id: 'visual',
+    name: '视觉模式',
+    description: '观察颜色变化，看到绿色后立即点击',
+    icon: 'eye',
+    color: '#00d4ff',
+  },
+  {
+    id: 'auditory',
+    name: '听觉模式',
+    description: '听到提示音后立即点击',
+    icon: 'volume-2',
+    color: '#a855f7',
+  },
+  {
+    id: 'tactile',
+    name: '触觉模式',
+    description: '感受到设备振动后立即点击',
+    icon: 'smartphone',
+    color: '#ec4899',
+  },
+  {
+    id: 'mixed',
+    name: '混合模式',
+    description: '三种模式依次切换，全面测试反应能力',
+    icon: 'shuffle',
+    color: '#f97316',
+  },
+  {
+    id: 'random',
+    name: '随机模式',
+    description: '每轮随机选择一种模式，挑战极限反应',
+    icon: 'dice-5',
+    color: '#10b981',
+  },
+];
+
 export type TestId =
   | 'reaction'
   | 'number-memory'
