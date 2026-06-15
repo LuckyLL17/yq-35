@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -17,6 +18,8 @@ export default function TypingSpeed() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const timerRef = useRef<number | null>(null);
   const updateScore = useScoreStore((s) => s.updateScore);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const config = difficulty ? TYPING_DIFFICULTY[difficulty] : null;
 
@@ -64,6 +67,16 @@ export default function TypingSpeed() {
   }, [timeLeft, phase, finishTest]);
 
   useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      const cfg = TYPING_DIFFICULTY.normal;
+      setDifficulty('normal');
+      setText(cfg.textPool[Math.floor(Math.random() * cfg.textPool.length)]);
+      setTimeLeft(cfg.timeLimit);
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
+
+  useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -74,9 +87,16 @@ export default function TypingSpeed() {
   };
 
   const handleRestart = () => {
-    setDifficulty(null);
-    setText('');
-    setPhase('select-difficulty');
+    if (isTrainingMode) {
+      const cfg = TYPING_DIFFICULTY[difficulty ?? 'normal'];
+      setText(cfg.textPool[Math.floor(Math.random() * cfg.textPool.length)]);
+      setTimeLeft(cfg.timeLimit);
+      setPhase('idle');
+    } else {
+      setDifficulty(null);
+      setText('');
+      setPhase('select-difficulty');
+    }
   };
 
   const correctChars = input.split('').filter((c, i) => c === text[i]).length;

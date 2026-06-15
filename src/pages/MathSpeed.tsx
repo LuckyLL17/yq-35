@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -51,6 +52,8 @@ export default function MathSpeed() {
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
   const updateScore = useScoreStore((s) => s.updateScore);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const config = difficulty ? MATH_DIFFICULTY[difficulty] : null;
 
@@ -60,6 +63,15 @@ export default function MathSpeed() {
     setTimeLeft(cfg.timeLimit);
     setPhase('idle');
   };
+
+  useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      const cfg = MATH_DIFFICULTY.normal;
+      setDifficulty('normal');
+      setTimeLeft(cfg.timeLimit);
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
 
   const startTest = useCallback(() => {
     if (!config) return;
@@ -115,8 +127,14 @@ export default function MathSpeed() {
   );
 
   const handleRestart = () => {
-    setDifficulty(null);
-    setPhase('select-difficulty');
+    if (isTrainingMode) {
+      const cfg = MATH_DIFFICULTY[difficulty ?? 'normal'];
+      setTimeLeft(cfg.timeLimit);
+      setPhase('idle');
+    } else {
+      setDifficulty(null);
+      setPhase('select-difficulty');
+    }
   };
 
   const difficultyLabel = difficulty

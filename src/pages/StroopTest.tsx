@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -56,6 +57,8 @@ export default function StroopTest() {
   const feedbackRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const updateScore = useScoreStore((s) => s.updateScore);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const config = difficulty ? STROOP_DIFFICULTY[difficulty] : STROOP_DIFFICULTY.normal;
   const colors = ALL_COLORS.slice(0, config.colorCount);
@@ -65,6 +68,13 @@ export default function StroopTest() {
     setDifficulty(level);
     setPhase('idle');
   }, []);
+
+  useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      setDifficulty('normal');
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
 
   const startTest = useCallback(() => {
     const cfg = difficulty ? STROOP_DIFFICULTY[difficulty] : STROOP_DIFFICULTY.normal;
@@ -118,8 +128,12 @@ export default function StroopTest() {
   };
 
   const handleRestart = () => {
-    setDifficulty(null);
-    setPhase('select-difficulty');
+    if (isTrainingMode) {
+      setPhase('idle');
+    } else {
+      setDifficulty(null);
+      setPhase('select-difficulty');
+    }
   };
 
   return (

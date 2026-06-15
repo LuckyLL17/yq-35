@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -27,6 +28,8 @@ export default function SequenceMemory() {
   const timeoutRefs = useRef<number[]>([]);
   const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const config = difficulty ? SEQUENCE_DIFFICULTY[difficulty] : SEQUENCE_DIFFICULTY.normal;
   const colors = ALL_COLORS.slice(0, config.colorCount);
@@ -109,6 +112,13 @@ export default function SequenceMemory() {
     [phase, sequence, playerIndex, addRound, playSequence, updateScore],
   );
 
+  useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      setDifficulty('normal');
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
+
   const handleDifficultySelect = useCallback((level: DifficultyLevel) => {
     setDifficulty(level);
     setPhase('idle');
@@ -116,14 +126,23 @@ export default function SequenceMemory() {
 
   const handleRestart = useCallback(() => {
     clearTimers();
-    setDifficulty(null);
-    setPhase('select-difficulty');
-    setSequence([]);
-    setPlayerIndex(0);
-    setActiveIndex(null);
-    setFinalScore(0);
-    setShowingIndex(null);
-  }, [clearTimers]);
+    if (isTrainingMode) {
+      setPhase('idle');
+      setSequence([]);
+      setPlayerIndex(0);
+      setActiveIndex(null);
+      setFinalScore(0);
+      setShowingIndex(null);
+    } else {
+      setDifficulty(null);
+      setPhase('select-difficulty');
+      setSequence([]);
+      setPlayerIndex(0);
+      setActiveIndex(null);
+      setFinalScore(0);
+      setShowingIndex(null);
+    }
+  }, [clearTimers, isTrainingMode]);
 
   return (
     <TestLayout test={test}>

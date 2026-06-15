@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -51,6 +52,8 @@ export default function ColorVision() {
   const [lives, setLives] = useState(3);
   const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const config = difficulty ? COLOR_VISION_DIFFICULTY[difficulty] : COLOR_VISION_DIFFICULTY.normal;
 
@@ -76,14 +79,25 @@ export default function ColorVision() {
     setPhase('playing');
   }, [generateLevel, config.lives]);
 
+  useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      setDifficulty('normal');
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
+
   const handleDifficultySelect = (lvl: DifficultyLevel) => {
     setDifficulty(lvl);
     setPhase('idle');
   };
 
   const handleRestart = () => {
-    setDifficulty(null);
-    setPhase('select-difficulty');
+    if (isTrainingMode) {
+      setPhase('idle');
+    } else {
+      setDifficulty(null);
+      setPhase('select-difficulty');
+    }
   };
 
   const handleClick = useCallback(

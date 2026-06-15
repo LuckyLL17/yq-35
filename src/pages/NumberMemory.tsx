@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -30,6 +31,8 @@ export default function NumberMemory() {
   const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const config = difficulty ? NUMBER_MEMORY_DIFFICULTY[difficulty] : NUMBER_MEMORY_DIFFICULTY.normal;
   const getShowDuration = (lvl: number) => config.showDurationBase + lvl * config.showDurationPerDigit;
@@ -83,6 +86,15 @@ export default function NumberMemory() {
   );
 
   useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      const cfg = NUMBER_MEMORY_DIFFICULTY.normal;
+      setDifficulty('normal');
+      setLevel(cfg.startLevel);
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
+
+  useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
@@ -90,9 +102,15 @@ export default function NumberMemory() {
   }, []);
 
   const handleRestart = () => {
-    setDifficulty(null);
-    setLevel(3);
-    setPhase('select-difficulty');
+    if (isTrainingMode) {
+      const cfg = NUMBER_MEMORY_DIFFICULTY[difficulty ?? 'normal'];
+      setLevel(cfg.startLevel);
+      setPhase('idle');
+    } else {
+      setDifficulty(null);
+      setLevel(3);
+      setPhase('select-difficulty');
+    }
   };
 
   return (

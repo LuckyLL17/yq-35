@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -40,6 +41,8 @@ export default function ChimpTest() {
   const [shaking, setShaking] = useState(false);
   const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const config = difficulty ? CHIMP_DIFFICULTY[difficulty] : CHIMP_DIFFICULTY.normal;
 
@@ -82,6 +85,15 @@ export default function ChimpTest() {
       }
   };
 
+  useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      const cfg = CHIMP_DIFFICULTY.normal;
+      setDifficulty('normal');
+      setLevel(cfg.startLevel);
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
+
   const handleDifficultySelect = useCallback((lvl: DifficultyLevel) => {
     setDifficulty(lvl);
     setLevel(CHIMP_DIFFICULTY[lvl].startLevel);
@@ -89,9 +101,15 @@ export default function ChimpTest() {
   }, []);
 
   const handleRestart = useCallback(() => {
-    setDifficulty(null);
-    setPhase('select-difficulty');
-  }, []);
+    if (isTrainingMode) {
+      const cfg = CHIMP_DIFFICULTY[difficulty ?? 'normal'];
+      setLevel(cfg.startLevel);
+      setPhase('idle');
+    } else {
+      setDifficulty(null);
+      setPhase('select-difficulty');
+    }
+  }, [isTrainingMode, difficulty]);
 
   const difficultyLabel = difficulty === 'easy' ? '简单' : difficulty === 'normal' ? '普通' : '困难';
 

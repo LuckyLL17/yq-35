@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -28,6 +29,8 @@ export default function AimTrainer() {
   const updateScore = useScoreStore((s) => s.updateScore);
   const animRef = useRef<number>(0);
   const currentIndexRef = useRef(0);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const config = difficulty ? AIM_DIFFICULTY[difficulty] : AIM_DIFFICULTY.normal;
 
@@ -49,9 +52,20 @@ export default function AimTrainer() {
     return result;
   }, [config.targetCount, config.targetSize]);
 
+  useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      setDifficulty('normal');
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
+
   const startTest = useCallback(() => {
-    setPhase('select-difficulty');
-  }, []);
+    if (isTrainingMode) {
+      setPhase('idle');
+    } else {
+      setPhase('select-difficulty');
+    }
+  }, [isTrainingMode]);
 
   const beginPlaying = useCallback(() => {
     const ts = generateTargets();

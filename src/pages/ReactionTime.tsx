@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
@@ -42,6 +43,8 @@ export default function ReactionTime() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const activeModeRef = useRef<ReactionMode>('visual');
   const updateScore = useScoreStore((s) => s.updateScore);
+  const [searchParams] = useSearchParams();
+  const isTrainingMode = searchParams.get('training') === '1';
 
   const currentModeInfo = useMemo(
     () => REACTION_MODES.find((m) => m.id === currentMode)!,
@@ -174,6 +177,17 @@ export default function ReactionTime() {
     setAttempts([]);
     setPhase('select-difficulty');
   }, []);
+
+  useEffect(() => {
+    if (isTrainingMode && phase === 'select-difficulty') {
+      setDifficulty('normal');
+      setSelectedMode('visual');
+      activeModeRef.current = 'visual';
+      setCurrentMode('visual');
+      setAttempts([]);
+      setPhase('idle');
+    }
+  }, [isTrainingMode, phase]);
 
   useEffect(() => {
     return () => {
@@ -408,7 +422,16 @@ export default function ReactionTime() {
             score={avgScore}
             onRetry={() => {
               setAttempts([]);
-              setPhase('select-difficulty');
+              if (isTrainingMode) {
+                if (selectedMode === 'mixed' || selectedMode === 'random') {
+                  const nextMode = getNextMode(selectedMode, 0, selectedMode === 'random');
+                  activeModeRef.current = nextMode;
+                  setCurrentMode(nextMode);
+                }
+                setPhase('idle');
+              } else {
+                setPhase('select-difficulty');
+              }
             }}
             stats={[
               ...(difficulty
