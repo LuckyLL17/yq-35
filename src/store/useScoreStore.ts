@@ -31,7 +31,7 @@ interface ScoreStore {
   resetAll: () => void;
 }
 
-const REFERENCE_SCORES: Record<TestId, number> = {
+export const REFERENCE_SCORES: Record<TestId, number> = {
   reaction: 200,
   'number-memory': 10,
   typing: 60,

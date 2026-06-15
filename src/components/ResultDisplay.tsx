@@ -5,6 +5,7 @@ import { useScoreStore } from '@/store/useScoreStore';
 import { useTrainingStore } from '@/store/useTrainingStore';
 import { Trophy, RotateCcw, Home, Star, ArrowRight, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import ShareResult from './ShareResult';
 
 interface ResultDisplayProps {
   test: TestMeta;
@@ -102,6 +103,7 @@ export default function ResultDisplay({ test, score, stats, onRetry }: ResultDis
                 <ArrowRight className="w-4 h-4" />
                 返回训练列表
               </button>
+              <ShareResult test={test} score={score} isNewBest={isNewBest} />
             </>
           ) : (
             <>
@@ -116,6 +118,7 @@ export default function ResultDisplay({ test, score, stats, onRetry }: ResultDis
                 <RotateCcw className="w-4 h-4" />
                 再测一次
               </button>
+              <ShareResult test={test} score={score} isNewBest={isNewBest} />
             </>
           )}
         </div>
@@ -172,6 +175,7 @@ export default function ResultDisplay({ test, score, stats, onRetry }: ResultDis
           <Home className="w-4 h-4" />
           返回首页
         </Link>
+        <ShareResult test={test} score={score} isNewBest={isNewBest} />
       </div>
     </div>
   );
