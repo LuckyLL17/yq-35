@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LineChart,
@@ -143,7 +143,9 @@ export default function Profile() {
 
   const [filterRarity, setFilterRarity] = useState<RarityFilter>('all');
   const [showTestDropdown, setShowTestDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownPanelRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 200 });
 
   const [activeTab, setActiveTab] = useState<'stats' | 'history' | 'achievements'>('stats');
 
@@ -154,16 +156,42 @@ export default function Profile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useLayoutEffect(() => {
+    if (!showTestDropdown || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + 8,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, [showTestDropdown]);
+
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
-      if (!dropdownRef.current) return;
-      if (!dropdownRef.current.contains(e.target as Node)) {
-        setShowTestDropdown(false);
-      }
+      if (!showTestDropdown) return;
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (dropdownPanelRef.current?.contains(target)) return;
+      setShowTestDropdown(false);
     }
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, []);
+    function onResizeOrScroll() {
+      if (!showTestDropdown || !triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+    document.addEventListener('click', onDocClick, true);
+    window.addEventListener('resize', onResizeOrScroll);
+    window.addEventListener('scroll', onResizeOrScroll, true);
+    return () => {
+      document.removeEventListener('click', onDocClick, true);
+      window.removeEventListener('resize', onResizeOrScroll);
+      window.removeEventListener('scroll', onResizeOrScroll, true);
+    };
+  }, [showTestDropdown]);
 
   useEffect(() => {
     if (filterQuickDate !== 'custom') {
@@ -713,13 +741,11 @@ export default function Profile() {
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div className="relative" ref={dropdownRef}>
+                    <div>
                       <label className="text-[11px] text-white/40 mb-1.5 block tracking-wider uppercase">测试类型筛选</label>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowTestDropdown((v) => !v);
-                        }}
+                        ref={triggerRef}
+                        onClick={() => setShowTestDropdown((v) => !v)}
                         className="w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/80 hover:border-white/20 transition-all"
                       >
                         <span className="flex items-center gap-2 truncate">
@@ -732,48 +758,6 @@ export default function Profile() {
                         </span>
                         <ChevronDown className={cn('w-4 h-4 text-white/40 transition-transform flex-shrink-0', showTestDropdown && 'rotate-180')} />
                       </button>
-                      {showTestDropdown && (
-                        <div className="absolute z-[100] top-[calc(100%+8px)] left-0 right-0 glass-card p-2 max-h-80 overflow-y-auto scrollbar-thin border border-white/15 shadow-2xl animate-fade-in-scale">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setFilterTests([]);
-                              setShowTestDropdown(false);
-                            }}
-                            className={cn(
-                              'w-full text-left px-3 py-2 rounded-lg text-sm transition-all mb-1 flex items-center justify-between',
-                              filterTests.length === 0 ? 'bg-neon-cyan/15 text-neon-cyan' : 'text-white/70 hover:bg-white/5',
-                            )}
-                          >
-                            <span>全部测试类型</span>
-                            {filterTests.length === 0 && <Check className="w-4 h-4" />}
-                          </button>
-                          {TESTS.map((test) => {
-                            const active = filterTests.includes(test.id);
-                            const Icon = iconMap[test.id];
-                            return (
-                              <button
-                                key={test.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleTestFilter(test.id);
-                                }}
-                                className={cn(
-                                  'w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all',
-                                  'hover:bg-white/5',
-                                )}
-                                style={active ? { backgroundColor: `${test.color}15`, color: test.color } : { color: 'rgba(255,255,255,0.8)' }}
-                              >
-                                <span className="flex items-center gap-2">
-                                  <Icon className="w-4 h-4" />
-                                  <span>{test.name}</span>
-                                </span>
-                                {active && <Check className="w-4 h-4" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
 
                     <div>
@@ -1176,6 +1160,52 @@ export default function Profile() {
           )}
         </div>
       </main>
+
+      {showTestDropdown && (
+        <div
+          ref={dropdownPanelRef}
+          className="fixed z-[200] glass-card p-2 max-h-80 overflow-y-auto scrollbar-thin border border-white/15 shadow-2xl animate-fade-in-scale"
+          style={{
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+          }}
+        >
+          <button
+            onClick={() => {
+              setFilterTests([]);
+            }}
+            className={cn(
+              'w-full text-left px-3 py-2 rounded-lg text-sm transition-all mb-1 flex items-center justify-between',
+              filterTests.length === 0 ? 'bg-neon-cyan/15 text-neon-cyan' : 'text-white/70 hover:bg-white/5',
+            )}
+          >
+            <span>全部测试类型</span>
+            {filterTests.length === 0 && <Check className="w-4 h-4" />}
+          </button>
+          {TESTS.map((test) => {
+            const active = filterTests.includes(test.id);
+            const Icon = iconMap[test.id];
+            return (
+              <button
+                key={test.id}
+                onClick={() => toggleTestFilter(test.id)}
+                className={cn(
+                  'w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all',
+                  'hover:bg-white/5',
+                )}
+                style={active ? { backgroundColor: `${test.color}15`, color: test.color } : { color: 'rgba(255,255,255,0.8)' }}
+              >
+                <span className="flex items-center gap-2">
+                  <Icon className="w-4 h-4" />
+                  <span>{test.name}</span>
+                </span>
+                {active && <Check className="w-4 h-4" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {detailAchievement && (
         <AchievementDetailModal
