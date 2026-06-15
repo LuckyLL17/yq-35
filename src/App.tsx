@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Home from '@/pages/Home';
 import Profile from '@/pages/Profile';
+import TrainingPlans from '@/pages/TrainingPlans';
+import TrainingPlanEditor from '@/pages/TrainingPlanEditor';
+import TrainingSessionPage from '@/pages/TrainingSessionPage';
 import ReactionTime from '@/pages/ReactionTime';
 import NumberMemory from '@/pages/NumberMemory';
 import TypingSpeed from '@/pages/TypingSpeed';
@@ -58,6 +61,10 @@ function RoutesWithWatcher() {
       <Routes location={location}>
         <Route path="/" element={<Home />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/training" element={<TrainingPlans />} />
+        <Route path="/training/new" element={<TrainingPlanEditor />} />
+        <Route path="/training/edit/:id" element={<TrainingPlanEditor />} />
+        <Route path="/training/session" element={<TrainingSessionPage />} />
         <Route path="/reaction" element={<ReactionTime />} />
         <Route path="/number-memory" element={<NumberMemory />} />
         <Route path="/typing" element={<TypingSpeed />} />

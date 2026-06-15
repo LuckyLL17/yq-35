@@ -103,6 +103,125 @@ export const ABILITIES: AbilityInfo[] = [
   { id: 'math', name: '数学心算', tests: ['math-speed'], color: '#10b981' },
 ];
 
+export interface TrainingPlanItem {
+  testId: TestId;
+  rounds: number;
+}
+
+export interface TrainingPlan {
+  id: string;
+  name: string;
+  description: string;
+  items: TrainingPlanItem[];
+  createdAt: number;
+  updatedAt: number;
+  color: string;
+  icon: string;
+}
+
+export interface TrainingSessionItem {
+  testId: TestId;
+  rounds: number;
+  currentRound: number;
+  completed: boolean;
+  scores: number[];
+}
+
+export interface TrainingSession {
+  id: string;
+  planId: string;
+  planName: string;
+  items: TrainingSessionItem[];
+  currentItemIndex: number;
+  startTime: number;
+  endTime?: number;
+  completed: boolean;
+}
+
+export interface DailyTraining {
+  date: string;
+  plan: TrainingPlan;
+  completed: boolean;
+  completedAt?: number;
+}
+
+export type TrainingPlanTemplateType = 'balanced' | 'reaction' | 'memory' | 'cognition' | 'quick';
+
+export interface TrainingPlanTemplate {
+  id: TrainingPlanTemplateType;
+  name: string;
+  description: string;
+  items: TrainingPlanItem[];
+  color: string;
+  icon: string;
+}
+
+export const TRAINING_TEMPLATES: TrainingPlanTemplate[] = [
+  {
+    id: 'balanced',
+    name: '综合训练',
+    description: '全面提升各项能力的均衡训练套餐',
+    items: [
+      { testId: 'reaction', rounds: 3 },
+      { testId: 'number-memory', rounds: 2 },
+      { testId: 'aim', rounds: 2 },
+      { testId: 'stroop', rounds: 2 },
+      { testId: 'math-speed', rounds: 2 },
+    ],
+    color: '#00d4ff',
+    icon: 'target',
+  },
+  {
+    id: 'reaction',
+    name: '反应速度',
+    description: '专注于提升反应速度和手眼协调',
+    items: [
+      { testId: 'reaction', rounds: 5 },
+      { testId: 'aim', rounds: 3 },
+      { testId: 'typing', rounds: 2 },
+    ],
+    color: '#10b981',
+    icon: 'zap',
+  },
+  {
+    id: 'memory',
+    name: '记忆强化',
+    description: '深度训练记忆能力的专项套餐',
+    items: [
+      { testId: 'number-memory', rounds: 3 },
+      { testId: 'sequence-memory', rounds: 3 },
+      { testId: 'chimp', rounds: 2 },
+    ],
+    color: '#a855f7',
+    icon: 'brain',
+  },
+  {
+    id: 'cognition',
+    name: '认知挑战',
+    description: '挑战认知能力极限的高难度套餐',
+    items: [
+      { testId: 'stroop', rounds: 3 },
+      { testId: 'chimp', rounds: 2 },
+      { testId: 'math-speed', rounds: 3 },
+      { testId: 'color-vision', rounds: 2 },
+    ],
+    color: '#f59e0b',
+    icon: 'sparkles',
+  },
+  {
+    id: 'quick',
+    name: '快速热身',
+    description: '5分钟快速热身训练',
+    items: [
+      { testId: 'reaction', rounds: 2 },
+      { testId: 'math-speed', rounds: 1 },
+      { testId: 'aim', rounds: 1 },
+    ],
+    color: '#ec4899',
+    icon: 'flame',
+  },
+];
+
 export const TESTS: TestMeta[] = [
   {
     id: 'reaction',

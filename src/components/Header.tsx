@@ -1,5 +1,6 @@
-import { Gauge, RotateCcw, User } from 'lucide-react';
+import { Gauge, RotateCcw, User, Dumbbell } from 'lucide-react';
 import { useScoreStore } from '@/store/useScoreStore';
+import { useTrainingStore } from '@/store/useTrainingStore';
 import { Link } from 'react-router-dom';
 
 export default function Header() {
@@ -9,6 +10,7 @@ export default function Header() {
   );
   const totalTests = Object.keys(useScoreStore.getState().records).length;
   const resetAll = useScoreStore((s) => s.resetAll);
+  const dailyTraining = useTrainingStore((s) => s.getDailyTraining());
 
   return (
     <header className="relative border-b border-white/5 overflow-hidden">
@@ -33,6 +35,20 @@ export default function Header() {
           </div>
 
           <div className="flex items-center gap-4">
+            <Link
+              to="/training"
+              className={`glass-card px-4 py-3 transition-colors relative ${
+                dailyTraining.completed
+                  ? 'text-neon-green hover:border-neon-green/40'
+                  : 'text-white/60 hover:text-neon-cyan hover:border-neon-cyan/40'
+              }`}
+              title="训练套餐"
+            >
+              <Dumbbell className="w-5 h-5" />
+              {!dailyTraining.completed && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-neon-red rounded-full animate-pulse" />
+              )}
+            </Link>
             <div className="glass-card px-5 py-3">
               <div className="text-xs text-white/40">已完成测试</div>
               <div className="font-display font-bold text-2xl text-neon-cyan">
