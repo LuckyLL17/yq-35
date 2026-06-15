@@ -26,6 +26,18 @@ export interface ScoreHistoryPoint {
   duration: number;
 }
 
+export interface TestRecord {
+  id: string;
+  testId: TestId;
+  score: number;
+  timestamp: number;
+  duration: number;
+  isBest: boolean;
+  isNewRecord: boolean;
+  improvement?: number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface ScoreRecord {
   testId: TestId;
   bestScore: number;
@@ -34,6 +46,37 @@ export interface ScoreRecord {
   updatedAt: number;
   history: ScoreHistoryPoint[];
   totalDuration: number;
+}
+
+export type AchievementRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  rarity: AchievementRarity;
+  color: string;
+  condition: (context: AchievementContext) => boolean;
+  checkOn?: ('test-complete' | 'profile-load')[];
+  relatedTest?: TestId | 'all';
+}
+
+export interface UnlockedAchievement {
+  id: string;
+  unlockedAt: number;
+}
+
+export interface AchievementContext {
+  records: Partial<Record<TestId, ScoreRecord>>;
+  allTestRecords: TestRecord[];
+  completedTests: number;
+  totalAttempts: number;
+  totalDuration: number;
+  currentTest?: TestId;
+  currentScore?: number;
+  currentDuration?: number;
+  isCurrentBest?: boolean;
 }
 
 export type AbilityDimension =
