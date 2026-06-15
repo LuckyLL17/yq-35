@@ -2,32 +2,11 @@ import { useState, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
+import { generateGrid, calculateChimpFinalLevel, isCorrectChimpCell, type Cell } from '@/algorithms/chimp';
 import { TESTS, CHIMP_DIFFICULTY } from '@/types';
 import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'showing' | 'playing' | 'result';
-
-interface Cell {
-  x: number;
-  y: number;
-  value: number;
-}
-
-function generateGrid(level: number, gridSize: number): Cell[] {
-  const positions = new Set<string>();
-  const cells: Cell[] = [];
-
-  while (positions.size < level) {
-    const x = Math.floor(Math.random() * gridSize);
-    const y = Math.floor(Math.random() * gridSize);
-    const key = `${x}-${y}`;
-    if (positions.has(key)) continue;
-    positions.add(key);
-    cells.push({ x, y, value: cells.length + 1 });
-  }
-
-  return cells;
-}
 
 export default function ChimpTest() {
   const test = TESTS.find((t) => t.id === 'chimp')!;
@@ -70,7 +49,7 @@ export default function ChimpTest() {
   const handleCellClick = (cell: Cell) => {
     if (phase !== 'playing') return;
 
-    if (cell.value === nextNum) {
+    if (isCorrectChimpCell(cell.value, nextNum)) {
         if (nextNum >= cells.length) {
           const nextLvl = level + 1;
           setLevel(nextLvl);
@@ -81,7 +60,7 @@ export default function ChimpTest() {
       } else {
         setShaking(true);
         setTimeout(() => setShaking(false), 300);
-        const finalLvl = Math.max(0, level - 1);
+        const finalLvl = calculateChimpFinalLevel(level);
         setFinalLevel(finalLvl);
         finishTest(finalLvl);
       }

@@ -1,9 +1,9 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
 import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
-// https://vite.dev/config/
 export default defineConfig({
   build: {
     sourcemap: 'hidden',
@@ -27,4 +27,19 @@ export default defineConfig({
     }), 
     tsconfigPaths()
   ],
+  test: {
+    globals: true,
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/algorithms/**/*.ts'],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
+      },
+    },
+  },
 })

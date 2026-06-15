@@ -2,16 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
+import { generateTargets, calculateAverageTime, calculateAccuracy, type Target } from '@/algorithms/aim';
 import { TESTS, AIM_DIFFICULTY } from '@/types';
 import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
-
-interface Target {
-  id: number;
-  x: number;
-  y: number;
-}
 
 export default function AimTrainer() {
   const test = TESTS.find((t) => t.id === 'aim')!;
@@ -39,26 +34,15 @@ export default function AimTrainer() {
       },
     });
 
-  const generateTargets = useCallback(() => {
+  const createTargets = useCallback(() => {
     const rect = areaRef.current?.getBoundingClientRect();
     const w = rect?.width ?? 600;
     const h = rect?.height ?? 400;
-    const padding = 50;
-    const size = config.targetSize;
-
-    const result: Target[] = [];
-    for (let i = 0; i < config.targetCount; i++) {
-      result.push({
-        id: i,
-        x: padding + Math.random() * (w - padding * 2 - size),
-        y: padding + Math.random() * (h - padding * 2 - size),
-      });
-    }
-    return result;
+    return generateTargets(config.targetCount, w, h, config.targetSize, 50);
   }, [config.targetCount, config.targetSize]);
 
   const beginPlaying = useCallback(() => {
-    const ts = generateTargets();
+    const ts = createTargets();
     setTargets(ts);
     setCurrentIndex(0);
     setClickTimes([]);
@@ -137,10 +121,7 @@ export default function AimTrainer() {
     }
   }, [phase]);
 
-  const avgTime =
-    clickTimes.length > 0
-      ? Math.round(clickTimes.reduce((a, b) => a + b, 0) / clickTimes.length)
-      : 0;
+  const avgTime = calculateAverageTime(clickTimes);
 
   const difficultyLabel =
     difficulty === 'easy' ? '简单' : difficulty === 'normal' ? '普通' : difficulty === 'hard' ? '困难' : '';
@@ -249,7 +230,7 @@ export default function AimTrainer() {
                 { label: '失误次数', value: `${missCount}` },
                 {
                   label: '准确率',
-                  value: `${Math.round((targets.length / (targets.length + missCount)) * 100)}%`,
+                  value: `${calculateAccuracy(targets.length, missCount)}%`,
                 },
               ]}
             />

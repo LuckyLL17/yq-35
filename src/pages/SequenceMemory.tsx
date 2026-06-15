@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
+import { addRoundToSequence, checkSequenceInput, calculateSequenceScore } from '@/algorithms/sequenceMemory';
 import { TESTS, SEQUENCE_DIFFICULTY, DifficultyLevel } from '@/types';
 import { useTestFlow } from '@/hooks/useTestFlow';
 
@@ -45,10 +46,7 @@ export default function SequenceMemory() {
   }, []);
 
   const addRound = useCallback(
-    (seq: number[]) => {
-      const next = [...seq, Math.floor(Math.random() * config.colorCount)];
-      return next;
-    },
+    (seq: number[]) => addRoundToSequence(seq, config.colorCount),
     [config.colorCount],
   );
 
@@ -95,7 +93,7 @@ export default function SequenceMemory() {
       setActiveIndex(colorIdx);
       setTimeout(() => setActiveIndex(null), 200);
 
-      if (sequence[playerIndex] === colorIdx) {
+      if (checkSequenceInput(sequence, playerIndex, colorIdx)) {
         const nextIdx = playerIndex + 1;
 
         if (nextIdx >= sequence.length) {
@@ -106,8 +104,9 @@ export default function SequenceMemory() {
           setPlayerIndex(nextIdx);
         }
       } else {
-        setFinalScore(sequence.length - 1);
-        finishTest(sequence.length - 1);
+        const score = calculateSequenceScore(sequence.length);
+        setFinalScore(score);
+        finishTest(score);
       }
     },
     [phase, sequence, playerIndex, addRound, playSequence, finishTest],

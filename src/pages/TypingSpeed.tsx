@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
+import { calculateCorrectChars, calculateWPM, calculateAccuracy } from '@/algorithms/typing';
 import { TESTS, TYPING_DIFFICULTY } from '@/types';
 import { useTestFlow } from '@/hooks/useTestFlow';
 
@@ -36,8 +37,8 @@ export default function TypingSpeed() {
 
   const finishTypingTest = useCallback(() => {
     clearCountdown();
-    const correctChars = input.split('').filter((c, i) => c === text[i]).length;
-    const correctWords = Math.floor(correctChars / 5);
+    const chars = calculateCorrectChars(input, text);
+    const correctWords = calculateWPM(chars);
     const timeLimitMs = (config?.timeLimit ?? 60) * 1000;
     finishTest(correctWords, timeLimitMs);
   }, [input, text, finishTest, config, clearCountdown]);
@@ -61,9 +62,9 @@ export default function TypingSpeed() {
     setInput(e.target.value);
   };
 
-  const correctChars = input.split('').filter((c, i) => c === text[i]).length;
-  const finalWPM = phase === 'result' ? Math.floor(correctChars / 5) : 0;
-  const currentWPM = phase === 'playing' ? Math.floor(correctChars / 5) : 0;
+  const correctChars = calculateCorrectChars(input, text);
+  const finalWPM = phase === 'result' ? calculateWPM(correctChars) : 0;
+  const currentWPM = phase === 'playing' ? calculateWPM(correctChars) : 0;
 
   const difficultyLabel = difficulty
     ? { easy: '简单', normal: '普通', hard: '困难' }[difficulty]
@@ -77,9 +78,7 @@ export default function TypingSpeed() {
           { label: '总字符数', value: `${input.length}` },
           {
             label: '准确率',
-            value: `${
-              input.length > 0 ? Math.round((correctChars / input.length) * 100) : 0
-            }%`,
+            value: `${calculateAccuracy(correctChars, input.length)}%`,
           },
           { label: '用时', value: `${config?.timeLimit ?? 60}s` },
         ]

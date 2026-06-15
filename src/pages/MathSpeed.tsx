@@ -2,53 +2,22 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
-import { TESTS, MATH_DIFFICULTY, DIFFICULTY_OPTIONS, type MathDifficultyConfig } from '@/types';
+import { generateMathQuestion, checkMathAnswer, type MathQuestion, type MathConfig } from '@/algorithms/mathSpeed';
+import { TESTS, MATH_DIFFICULTY, DIFFICULTY_OPTIONS } from '@/types';
 import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'playing' | 'result';
 
-interface Question {
-  a: number;
-  b: number;
-  op: '+' | '-' | '×' | '÷';
-  answer: number;
-}
-
-function generateQuestion(config: MathDifficultyConfig): Question {
-  const op = config.ops[Math.floor(Math.random() * config.ops.length)];
-  let a: number, b: number, answer: number;
-
-  if (op === '÷') {
-    b = Math.floor(Math.random() * 11) + 2;
-    answer = Math.floor(Math.random() * Math.floor(config.maxBase / b)) + 1;
-    a = answer * b;
-  } else if (op === '+') {
-    a = Math.floor(Math.random() * config.maxBase) + 1;
-    b = Math.floor(Math.random() * config.maxBase) + 1;
-    answer = a + b;
-  } else if (op === '-') {
-    a = Math.floor(Math.random() * config.maxBase) + 1;
-    b = Math.floor(Math.random() * a) + 1;
-    answer = a - b;
-  } else {
-    a = Math.floor(Math.random() * 12) + 2;
-    b = Math.floor(Math.random() * 12) + 2;
-    answer = a * b;
-  }
-
-  return { a, b, op, answer };
-}
-
 export default function MathSpeed() {
   const test = TESTS.find((t) => t.id === 'math-speed')!;
-  const [question, setQuestion] = useState<Question | null>(null);
+  const [question, setQuestion] = useState<MathQuestion | null>(null);
   const [input, setInput] = useState('');
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { phase, setPhase, difficulty, config, startTimer, finishTest, restart, selectDifficulty, timeLeft, startCountdown } =
-    useTestFlow<Phase, MathDifficultyConfig>({
+    useTestFlow<Phase, MathConfig>({
       testId: 'math-speed',
       difficultyConfig: MATH_DIFFICULTY,
       onReset: () => {
@@ -70,7 +39,7 @@ export default function MathSpeed() {
     startCountdown(config.timeLimit);
     setCorrectCount(0);
     setWrongCount(0);
-    setQuestion(generateQuestion(config));
+    setQuestion(generateMathQuestion(config));
     setInput('');
     setPhase('playing');
 
@@ -90,12 +59,12 @@ export default function MathSpeed() {
       if (!question || !input || !config) return;
 
       const userAnswer = parseInt(input, 10);
-      if (userAnswer === question.answer) {
+      if (checkMathAnswer(question, userAnswer)) {
         setCorrectCount((c) => c + 1);
       } else {
         setWrongCount((w) => w + 1);
       }
-      setQuestion(generateQuestion(config));
+      setQuestion(generateMathQuestion(config));
       setInput('');
     },
     [question, input, config],

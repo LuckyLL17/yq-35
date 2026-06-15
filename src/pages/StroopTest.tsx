@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
+import { generateStroopQuestion, checkStroopAnswer, getStroopGridCols, calculateStroopAccuracy, type StroopQuestion } from '@/algorithms/stroop';
 import { TESTS, DifficultyLevel, STROOP_DIFFICULTY } from '@/types';
 import { useTestFlow } from '@/hooks/useTestFlow';
 
@@ -24,30 +25,10 @@ const DIFFICULTY_LABEL: Record<DifficultyLevel, string> = {
   hard: '困难',
 };
 
-type Question = {
-  textColor: number;
-  displayColor: number;
-};
-
-function generateQuestion(colorCount: number): Question {
-  const textColor = Math.floor(Math.random() * colorCount);
-  let displayColor = Math.floor(Math.random() * colorCount);
-  while (displayColor === textColor) {
-    displayColor = Math.floor(Math.random() * colorCount);
-  }
-  return { textColor, displayColor };
-}
-
-function getGridCols(colorCount: number): string {
-  if (colorCount <= 3) return 'grid-cols-3';
-  if (colorCount <= 4) return 'grid-cols-4';
-  return 'grid-cols-3';
-}
-
 export default function StroopTest() {
   const test = TESTS.find((t) => t.id === 'stroop')!;
   const [score, setScore] = useState(0);
-  const [question, setQuestion] = useState<Question | null>(null);
+  const [question, setQuestion] = useState<StroopQuestion | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
   const feedbackRef = useRef<number | null>(null);
@@ -73,7 +54,7 @@ export default function StroopTest() {
     setScore(0);
     setCorrectCount(0);
     setWrongCount(0);
-    setQuestion(generateQuestion(config.colorCount));
+    setQuestion(generateStroopQuestion(config.colorCount));
     setPhase('playing');
   }, [config, setPhase, startTimer, startCountdown]);
 
@@ -87,14 +68,14 @@ export default function StroopTest() {
   const handleAnswer = (colorId: number) => {
     if (!question || phase !== 'playing') return;
 
-    if (colorId === question.displayColor) {
+    if (checkStroopAnswer(question, colorId)) {
       setCorrectCount((c) => c + 1);
       feedbackRef.current = 0;
     } else {
       setWrongCount((w) => w + 1);
       feedbackRef.current = 1;
     }
-    setQuestion(generateQuestion(config.colorCount));
+    setQuestion(generateStroopQuestion(config.colorCount));
     setTimeout(() => {
       feedbackRef.current = null;
     }, 100);
@@ -198,7 +179,7 @@ export default function StroopTest() {
               <p className="mt-4 text-white/40 text-sm">选择这个文字显示的颜色</p>
             </div>
 
-            <div className={`grid ${getGridCols(config.colorCount)} gap-3 max-w-md mx-auto`}>
+            <div className={`grid ${getStroopGridCols(config.colorCount)} gap-3 max-w-md mx-auto`}>
               {colors.map((c) => (
                 <button
                   key={c.id}
@@ -229,11 +210,7 @@ export default function StroopTest() {
               { label: '错误数', value: `${wrongCount}` },
               {
                 label: '准确率',
-                value: `${
-                  correctCount + wrongCount > 0
-                    ? Math.round((correctCount / (correctCount + wrongCount)) * 100)
-                    : 0
-                }%`,
+                value: `${calculateStroopAccuracy(correctCount, wrongCount)}%`,
               },
               { label: '用时', value: `${config.timeLimit}s` },
             ]}

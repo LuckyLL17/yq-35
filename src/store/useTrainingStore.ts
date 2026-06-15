@@ -9,26 +9,14 @@ import type {
   TrainingPlanTemplateType,
 } from '@/types';
 import { TRAINING_TEMPLATES, TESTS } from '@/types';
+import { seededRandom, generateDailySeed, calculateSessionProgress, getTodayDateString } from '@/algorithms/training';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function getTodayDateString(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
-function seededRandom(seed: number): () => number {
-  let s = seed;
-  return () => {
-    s = (s * 9301 + 49297) % 233280;
-    return s / 233280;
-  };
-}
-
 function generateDailyPlan(dateStr: string): TrainingPlan {
-  const seed = dateStr.split('-').reduce((acc, val) => acc + parseInt(val, 10), 0);
+  const seed = generateDailySeed(dateStr);
   const random = seededRandom(seed);
 
   const allTestIds = TESTS.map((t) => t.id);
@@ -304,10 +292,7 @@ export const useTrainingStore = create<TrainingStore>()(
         const session = get().currentSession;
         if (!session) return 0;
 
-        const totalRounds = session.items.reduce((sum, item) => sum + item.rounds, 0);
-        const completedRounds = session.items.reduce((sum, item) => sum + item.scores.length, 0);
-
-        return totalRounds > 0 ? (completedRounds / totalRounds) * 100 : 0;
+        return calculateSessionProgress(session.items);
       },
 
       resetAll: () => {

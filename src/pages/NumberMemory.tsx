@@ -2,18 +2,11 @@ import { useState, useRef, useCallback } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
+import { generateNumber, calculateShowDuration, calculateFinalLevel } from '@/algorithms/numberMemory';
 import { TESTS, NUMBER_MEMORY_DIFFICULTY, DIFFICULTY_OPTIONS, type NumberMemoryDifficultyConfig } from '@/types';
 import { useTestFlow } from '@/hooks/useTestFlow';
 
 type Phase = 'select-difficulty' | 'idle' | 'showing' | 'input' | 'result';
-
-function generateNumber(length: number): string {
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += Math.floor(Math.random() * 10).toString();
-  }
-  return result;
-}
 
 export default function NumberMemory() {
   const test = TESTS.find((t) => t.id === 'number-memory')!;
@@ -59,7 +52,7 @@ export default function NumberMemory() {
     },
   });
 
-  const getShowDuration = useCallback((lvl: number) => config.showDurationBase + lvl * config.showDurationPerDigit, [config.showDurationBase, config.showDurationPerDigit]);
+  const getShowDuration = useCallback((lvl: number) => calculateShowDuration(lvl, config.showDurationBase, config.showDurationPerDigit), [config.showDurationBase, config.showDurationPerDigit]);
 
   const startTest = useCallback((lvl: number) => {
     if (testStartRef.current === 0) {
@@ -99,7 +92,7 @@ export default function NumberMemory() {
       } else {
         setShaking(true);
         setTimeout(() => setShaking(false), 300);
-        const finalLvl = Math.max(0, level - 1);
+        const finalLvl = calculateFinalLevel(level);
         setFinalLevel(finalLvl);
         const duration = elapsed();
         finishTest(finalLvl, duration);

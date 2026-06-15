@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import DifficultySelector from '@/components/DifficultySelector';
+import { getNextMode, calculateAverageReactionTime } from '@/algorithms/reaction';
 import { TESTS, REACTION_MODES, REACTION_DIFFICULTY, DIFFICULTY_OPTIONS, type ReactionMode } from '@/types';
 import { useTestFlow } from '@/hooks/useTestFlow';
 import { Eye, Volume2, Smartphone, Shuffle, Dice5, ChevronLeft } from 'lucide-react';
@@ -17,13 +18,6 @@ const modeIcons: Record<ReactionMode, typeof Eye> = {
 };
 
 const singleModes: ReactionMode[] = ['visual', 'auditory', 'tactile'];
-
-function getNextMode(currentMode: ReactionMode, attemptIndex: number, isRandom: boolean): ReactionMode {
-  if (isRandom) {
-    return singleModes[Math.floor(Math.random() * singleModes.length)];
-  }
-  return singleModes[attemptIndex % singleModes.length];
-}
 
 export default function ReactionTime() {
   const test = TESTS.find((t) => t.id === 'reaction')!;
@@ -138,7 +132,7 @@ export default function ReactionTime() {
       setReactionTime(time);
 
       if (newAttempts.length >= config.rounds) {
-        const avg = Math.round(newAttempts.reduce((a, b) => a + b.time, 0) / newAttempts.length);
+        const avg = calculateAverageReactionTime(newAttempts);
         finishTest(avg, undefined, { mode: selectedMode, difficulty, attempts: newAttempts });
       }
       setPhase('result');
@@ -237,7 +231,7 @@ export default function ReactionTime() {
       case 'result':
         return {
           title: `${reactionTime} ms`,
-          subtitle: attempts.length < config.rounds ? `点击继续 (${attempts.length}/${config.rounds})` : `平均: ${Math.round(attempts.reduce((a, b) => a + b.time, 0) / attempts.length)} ms · 点击再试`,
+          subtitle: attempts.length < config.rounds ? `点击继续 (${attempts.length}/${config.rounds})` : `平均: ${calculateAverageReactionTime(attempts)} ms · 点击再试`,
         };
       default:
         return { title: '', subtitle: '' };
@@ -246,7 +240,7 @@ export default function ReactionTime() {
 
   const avgScore =
     attempts.length >= config.rounds
-      ? Math.round(attempts.reduce((a, b) => a + b.time, 0) / attempts.length)
+      ? calculateAverageReactionTime(attempts)
       : reactionTime;
 
   const text = getText();

@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { TestId, ScoreRecord, ScoreHistoryPoint, TestRecord, UnlockedAchievement, AchievementContext } from '@/types';
 import { TESTS, ABILITIES } from '@/types';
 import { ACHIEVEMENTS } from '@/data/achievements';
+import { getNormalizedScore as algoGetNormalizedScore, calculateBestScore, calculateAbilityScore, IS_HIGHER_BETTER } from '@/algorithms/score';
 
 interface ScoreStore {
   records: Partial<Record<TestId, ScoreRecord>>;
@@ -31,29 +32,7 @@ interface ScoreStore {
   resetAll: () => void;
 }
 
-export const REFERENCE_SCORES: Record<TestId, number> = {
-  reaction: 200,
-  'number-memory': 10,
-  typing: 60,
-  aim: 500,
-  chimp: 10,
-  'color-vision': 20,
-  'sequence-memory': 15,
-  stroop: 50,
-  'math-speed': 30,
-};
-
-const IS_HIGHER_BETTER: Record<TestId, boolean> = {
-  reaction: false,
-  'number-memory': true,
-  typing: true,
-  aim: false,
-  chimp: true,
-  'color-vision': true,
-  'sequence-memory': true,
-  stroop: true,
-  'math-speed': true,
-};
+export { REFERENCE_SCORES } from '@/algorithms/score';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -72,26 +51,14 @@ export const useScoreStore = create<ScoreStore>()(
         const currentBest = existing?.bestScore ?? 0;
         const attempts = (existing?.attempts ?? 0) + 1;
 
-        let bestScore = currentBest;
-        let isBest = false;
-        let improvement: number | undefined;
-
+        const result = calculateBestScore(currentBest, score, IS_HIGHER_BETTER[testId]);
         if (!existing) {
-          bestScore = score;
-          isBest = true;
-        } else if (IS_HIGHER_BETTER[testId]) {
-          if (score > currentBest) {
-            bestScore = score;
-            isBest = true;
-            improvement = score - currentBest;
-          }
-        } else {
-          if (score < currentBest) {
-            bestScore = score;
-            isBest = true;
-            improvement = currentBest - score;
-          }
+          result.isBest = true;
+          result.bestScore = score;
         }
+        const bestScore = result.bestScore;
+        const isBest = result.isBest;
+        const improvement = result.improvement;
 
         const newPoint: ScoreHistoryPoint = {
           score,
@@ -183,12 +150,7 @@ export const useScoreStore = create<ScoreStore>()(
       getNormalizedScore: (testId: TestId, score: number) => {
         const test = TESTS.find((t) => t.id === testId);
         if (!test) return 0;
-        const ref = REFERENCE_SCORES[testId] || 1;
-        if (test.higherIsBetter) {
-          return Math.min(100, (score / ref) * 100);
-        } else {
-          return Math.min(100, Math.max(0, (ref / Math.max(score, 1)) * 100));
-        }
+        return algoGetNormalizedScore(testId, score, test.higherIsBetter);
       },
 
       getAbilityScore: (abilityId: string) => {
@@ -199,10 +161,8 @@ export const useScoreStore = create<ScoreStore>()(
             const record = get().records[testId];
             if (!record) return null;
             return get().getNormalizedScore(testId, record.bestScore);
-          })
-          .filter((s): s is number => s !== null);
-        if (scores.length === 0) return 0;
-        return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+          });
+        return calculateAbilityScore(scores);
       },
 
       getAllTestRecords: () => get().allTestRecords,
