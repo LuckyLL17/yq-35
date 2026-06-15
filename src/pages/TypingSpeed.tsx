@@ -33,7 +33,7 @@ export default function TypingSpeed() {
     const correctChars = input.split('').filter((c, i) => c === text[i]).length;
     const correctWords = Math.floor(correctChars / 5);
 
-    updateScore('typing', correctWords);
+    updateScore('typing', correctWords, 60000);
     setPhase('result');
   }, [input, text, updateScore]);
 

@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "@/pages/Home";
+import Profile from "@/pages/Profile";
 import ReactionTime from "@/pages/ReactionTime";
 import NumberMemory from "@/pages/NumberMemory";
 import TypingSpeed from "@/pages/TypingSpeed";
@@ -15,6 +16,7 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="/reaction" element={<ReactionTime />} />
         <Route path="/number-memory" element={<NumberMemory />} />
         <Route path="/typing" element={<TypingSpeed />} />

@@ -20,13 +20,45 @@ export interface TestMeta {
   higherIsBetter: boolean;
 }
 
+export interface ScoreHistoryPoint {
+  score: number;
+  timestamp: number;
+  duration: number;
+}
+
 export interface ScoreRecord {
   testId: TestId;
   bestScore: number;
   lastScore?: number;
   attempts: number;
   updatedAt: number;
+  history: ScoreHistoryPoint[];
+  totalDuration: number;
 }
+
+export type AbilityDimension =
+  | 'reaction'
+  | 'memory'
+  | 'coordination'
+  | 'vision'
+  | 'cognition'
+  | 'math';
+
+export interface AbilityInfo {
+  id: AbilityDimension;
+  name: string;
+  tests: TestId[];
+  color: string;
+}
+
+export const ABILITIES: AbilityInfo[] = [
+  { id: 'reaction', name: '反应速度', tests: ['reaction', 'aim'], color: '#00d4ff' },
+  { id: 'memory', name: '记忆能力', tests: ['number-memory', 'sequence-memory', 'chimp'], color: '#a855f7' },
+  { id: 'coordination', name: '手眼协调', tests: ['aim', 'typing'], color: '#ec4899' },
+  { id: 'vision', name: '视觉辨别', tests: ['color-vision'], color: '#f97316' },
+  { id: 'cognition', name: '认知能力', tests: ['stroop', 'chimp'], color: '#f59e0b' },
+  { id: 'math', name: '数学心算', tests: ['math-speed'], color: '#10b981' },
+];
 
 export const TESTS: TestMeta[] = [
   {

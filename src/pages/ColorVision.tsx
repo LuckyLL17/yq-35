@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import { TESTS } from '@/types';
@@ -47,6 +47,7 @@ export default function ColorVision() {
   const [baseColor, setBaseColor] = useState('#ffffff');
   const [finalLevel, setFinalLevel] = useState(0);
   const [lives, setLives] = useState(3);
+  const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
 
   const generateLevel = useCallback((lvl: number) => {
@@ -61,6 +62,7 @@ export default function ColorVision() {
   }, []);
 
   const startTest = useCallback(() => {
+    testStartRef.current = Date.now();
     setLevel(1);
     setLives(3);
     generateLevel(1);
@@ -78,7 +80,8 @@ export default function ColorVision() {
         setLives(newLives);
         if (newLives <= 0) {
           setFinalLevel(level - 1);
-          updateScore('color-vision', level - 1);
+          const duration = Date.now() - testStartRef.current;
+          updateScore('color-vision', level - 1, duration);
           setPhase('result');
         } else {
           generateLevel(level);

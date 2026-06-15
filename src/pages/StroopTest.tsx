@@ -62,7 +62,7 @@ export default function StroopTest() {
 
   useEffect(() => {
     if (phase === 'playing' && timeLeft === 0) {
-      updateScore('stroop', correctCount);
+      updateScore('stroop', correctCount, 45000);
       setScore(correctCount);
       setPhase('result');
     }

@@ -12,10 +12,14 @@ export default function ReactionTime() {
   const [reactionTime, setReactionTime] = useState(0);
   const [attempts, setAttempts] = useState<number[]>([]);
   const startTimeRef = useRef(0);
+  const testStartRef = useRef(0);
   const timeoutRef = useRef<number | null>(null);
   const updateScore = useScoreStore((s) => s.updateScore);
 
   const startWait = useCallback(() => {
+    if (testStartRef.current === 0) {
+      testStartRef.current = performance.now();
+    }
     setPhase('waiting');
     const delay = 1000 + Math.random() * 4000;
     timeoutRef.current = window.setTimeout(() => {
@@ -38,7 +42,9 @@ export default function ReactionTime() {
 
       if (newAttempts.length >= 5) {
         const avg = Math.round(newAttempts.reduce((a, b) => a + b, 0) / newAttempts.length);
-        updateScore('reaction', avg);
+        const duration = Math.round(performance.now() - testStartRef.current);
+        updateScore('reaction', avg, duration);
+        testStartRef.current = 0;
       }
       setPhase('result');
     } else if (phase === 'too-early') {

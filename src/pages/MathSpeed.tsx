@@ -74,7 +74,7 @@ export default function MathSpeed() {
 
   useEffect(() => {
     if (phase === 'playing' && timeLeft === 0) {
-      updateScore('math-speed', correctCount);
+      updateScore('math-speed', correctCount, 60000);
       setPhase('result');
     }
   }, [timeLeft, phase, correctCount, updateScore]);

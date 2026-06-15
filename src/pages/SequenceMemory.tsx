@@ -17,6 +17,7 @@ export default function SequenceMemory() {
   const [finalScore, setFinalScore] = useState(0);
   const [showingIndex, setShowingIndex] = useState<number | null>(null);
   const timeoutRefs = useRef<number[]>([]);
+  const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
 
   const clearTimers = useCallback(() => {
@@ -52,6 +53,7 @@ export default function SequenceMemory() {
 
   const startTest = useCallback(() => {
     clearTimers();
+    testStartRef.current = Date.now();
     const first = addRound([]);
     setSequence(first);
     setTimeout(() => playSequence(first), 300);
@@ -72,7 +74,8 @@ export default function SequenceMemory() {
         const nextIdx = playerIndex + 1;
 
         if (nextIdx >= sequence.length) {
-          updateScore('sequence-memory', sequence.length);
+          const duration = Date.now() - testStartRef.current;
+          updateScore('sequence-memory', sequence.length, duration);
           const nextSeq = addRound(sequence);
           setSequence(nextSeq);
           setTimeout(() => playSequence(nextSeq), 800);
@@ -81,7 +84,8 @@ export default function SequenceMemory() {
         }
       } else {
         setFinalScore(sequence.length - 1);
-        updateScore('sequence-memory', sequence.length - 1);
+        const duration = Date.now() - testStartRef.current;
+        updateScore('sequence-memory', sequence.length - 1, duration);
         setPhase('result');
       }
     },

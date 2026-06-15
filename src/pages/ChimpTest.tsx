@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import TestLayout from '@/components/TestLayout';
 import ResultDisplay from '@/components/ResultDisplay';
 import { TESTS } from '@/types';
@@ -36,6 +36,7 @@ export default function ChimpTest() {
   const [nextNum, setNextNum] = useState(1);
   const [finalLevel, setFinalLevel] = useState(0);
   const [shaking, setShaking] = useState(false);
+  const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
 
   const startLevel = useCallback((lvl: number) => {
@@ -49,6 +50,7 @@ export default function ChimpTest() {
   }, []);
 
   const startTest = useCallback(() => {
+    testStartRef.current = Date.now();
     setLevel(4);
     startLevel(4);
   }, [startLevel]);
@@ -69,7 +71,8 @@ export default function ChimpTest() {
         setTimeout(() => setShaking(false), 300);
         const finalLvl = Math.max(0, level - 1);
         setFinalLevel(finalLvl);
-        updateScore('chimp', finalLvl);
+        const duration = Date.now() - testStartRef.current;
+        updateScore('chimp', finalLvl, duration);
         setPhase('result');
       }
   };

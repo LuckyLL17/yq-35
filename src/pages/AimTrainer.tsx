@@ -69,8 +69,9 @@ export default function AimTrainer() {
 
       if (currentIndex + 1 >= targets.length) {
         const avg = Math.round(newTimes.reduce((a, b) => a + b, 0) / newTimes.length);
-        updateScore('aim', avg);
-        setStartTime(now - startTimeRef.current);
+        const duration = Math.round(now - startTimeRef.current);
+        updateScore('aim', avg, duration);
+        setStartTime(duration);
         setPhase('result');
       } else {
         setCurrentIndex(currentIndex + 1);

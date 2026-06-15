@@ -1,4 +1,4 @@
-import { Gauge, RotateCcw } from 'lucide-react';
+import { Gauge, RotateCcw, User } from 'lucide-react';
 import { useScoreStore } from '@/store/useScoreStore';
 import { Link } from 'react-router-dom';
 
@@ -43,6 +43,13 @@ export default function Header() {
               <div className="text-xs text-white/40">总尝试次数</div>
               <div className="font-display font-bold text-2xl text-neon-purple">{totalAttempts}</div>
             </div>
+            <Link
+              to="/profile"
+              className="glass-card px-4 py-3 text-white/60 hover:text-neon-cyan hover:border-neon-cyan/40 transition-colors"
+              title="用户档案"
+            >
+              <User className="w-5 h-5" />
+            </Link>
             {totalAttempts > 0 && (
               <button
                 onClick={() => {

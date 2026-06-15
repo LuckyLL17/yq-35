@@ -25,12 +25,16 @@ export default function NumberMemory() {
   const [shaking, setShaking] = useState(false);
   const timeoutRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
+  const testStartRef = useRef(0);
   const updateScore = useScoreStore((s) => s.updateScore);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const getShowDuration = (lvl: number) => 1000 + lvl * 400;
 
   const startTest = useCallback((lvl: number) => {
+    if (testStartRef.current === 0) {
+      testStartRef.current = Date.now();
+    }
     const num = generateNumber(lvl);
     setNumber(num);
     setShowTime(getShowDuration(lvl));
@@ -66,7 +70,9 @@ export default function NumberMemory() {
         setTimeout(() => setShaking(false), 300);
         const finalLvl = Math.max(0, level - 1);
         setFinalLevel(finalLvl);
-        updateScore('number-memory', finalLvl);
+        const duration = Date.now() - testStartRef.current;
+        updateScore('number-memory', finalLvl, duration);
+        testStartRef.current = 0;
         setPhase('result');
       }
     },
