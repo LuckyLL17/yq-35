@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LineChart,
@@ -38,12 +38,17 @@ import {
   Search,
   Lock,
   Sparkles,
+  CalendarRange,
+  AlertCircle,
+  Check,
+  X as XIcon,
 } from 'lucide-react';
 import { useScoreStore } from '@/store/useScoreStore';
 import { TESTS, ABILITIES } from '@/types';
-import type { TestId, TestRecord, AchievementRarity } from '@/types';
+import type { TestId, TestRecord, AchievementRarity, Achievement } from '@/types';
 import { cn } from '@/lib/utils';
 import { ACHIEVEMENTS, RARITY_INFO } from '@/data/achievements';
+import AchievementDetailModal from '@/components/AchievementDetailModal';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
   reaction: Zap,
@@ -78,8 +83,6 @@ function formatDateTime(timestamp: number): string {
 }
 
 function dateRangeStart(label: string): number | undefined {
-  const now = new Date();
-  now.setHours(23, 59, 59, 999);
   switch (label) {
     case 'today': {
       const d = new Date();
@@ -109,12 +112,13 @@ function dateRangeStart(label: string): number | undefined {
   }
 }
 
-const DATE_RANGE_OPTIONS = [
+const QUICK_DATE_OPTIONS = [
   { value: 'all', label: '全部时间' },
   { value: 'today', label: '今天' },
   { value: '7d', label: '最近 7 天' },
   { value: '30d', label: '最近 30 天' },
   { value: '90d', label: '最近 90 天' },
+  { value: 'custom', label: '自定义' },
 ];
 
 type RarityFilter = 'all' | AchievementRarity;
@@ -132,19 +136,52 @@ export default function Profile() {
   const store = useScoreStore();
   const [selectedTest, setSelectedTest] = useState<TestId>('reaction');
   const [filterTests, setFilterTests] = useState<TestId[]>([]);
-  const [filterDateRange, setFilterDateRange] = useState<string>('all');
+  const [filterQuickDate, setFilterQuickDate] = useState<string>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [customDateError, setCustomDateError] = useState<string>('');
+
   const [filterRarity, setFilterRarity] = useState<RarityFilter>('all');
   const [showTestDropdown, setShowTestDropdown] = useState(false);
-  const [celebrateIds, setCelebrateIds] = useState<string[]>([]);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const [activeTab, setActiveTab] = useState<'stats' | 'history' | 'achievements'>('stats');
 
+  const [detailAchievement, setDetailAchievement] = useState<Achievement | null>(null);
+
   useEffect(() => {
-    const ids = store.checkAchievementsOnProfileLoad();
-    if (ids.length > 0) {
-      setCelebrateIds(ids);
-    }
+    store.checkAchievementsOnProfileLoad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!dropdownRef.current) return;
+      if (!dropdownRef.current.contains(e.target as Node)) {
+        setShowTestDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  useEffect(() => {
+    if (filterQuickDate !== 'custom') {
+      setCustomDateError('');
+      return;
+    }
+    if (customStartDate && customEndDate) {
+      const s = new Date(customStartDate).getTime();
+      const e = new Date(customEndDate).getTime();
+      if (s > e) {
+        setCustomDateError('开始日期不能晚于结束日期');
+      } else {
+        setCustomDateError('');
+      }
+    } else {
+      setCustomDateError('');
+    }
+  }, [customStartDate, customEndDate, filterQuickDate]);
 
   const totalAttempts = store.getTotalAttempts();
   const totalDuration = store.getTotalDuration();
@@ -198,13 +235,33 @@ export default function Profile() {
   const selectedBest = store.getBestScore(selectedTest);
   const hasAnyData = totalAttempts > 0;
 
+  const effectiveStartDate = useMemo<number | undefined>(() => {
+    if (filterQuickDate === 'custom') {
+      if (!customStartDate) return undefined;
+      const d = new Date(customStartDate);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    }
+    return dateRangeStart(filterQuickDate);
+  }, [filterQuickDate, customStartDate]);
+
+  const effectiveEndDate = useMemo<number | undefined>(() => {
+    if (filterQuickDate !== 'custom' || !customEndDate) return undefined;
+    const d = new Date(customEndDate);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  }, [filterQuickDate, customEndDate]);
+
+  const customRangeInvalid = filterQuickDate === 'custom' && customDateError !== '';
+
   const filteredRecords: TestRecord[] = useMemo(() => {
+    if (customRangeInvalid) return [];
     return store.getTestRecordsByFilter(
       filterTests.length > 0 ? filterTests : undefined,
-      dateRangeStart(filterDateRange),
-      undefined,
+      effectiveStartDate,
+      effectiveEndDate,
     );
-  }, [store, filterTests, filterDateRange]);
+  }, [store, filterTests, effectiveStartDate, effectiveEndDate, customRangeInvalid]);
 
   const recordsByDate = useMemo(() => {
     const groups = new Map<string, TestRecord[]>();
@@ -236,9 +293,75 @@ export default function Profile() {
     setFilterTests((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
   };
 
+  function quickDateLabel(): string {
+    if (filterQuickDate === 'custom') {
+      if (customStartDate || customEndDate) {
+        return `${customStartDate || '...'} 至 ${customEndDate || '...'}`;
+      }
+      return '自定义';
+    }
+    return QUICK_DATE_OPTIONS.find((o) => o.value === filterQuickDate)?.label ?? '全部时间';
+  }
+
+  function computeProgressLabel(ach: Achievement): string | undefined {
+    const ctx = {
+      records: store.records,
+      allTestRecords: store.getAllTestRecords(),
+      completedTests: store.getCompletedTests(),
+      totalAttempts: store.getTotalAttempts(),
+      totalDuration: store.getTotalDuration(),
+    };
+    const id = ach.id;
+    const best = (tid: string) => store.records[tid as TestId]?.bestScore ?? 0;
+    switch (id) {
+      case 'first-step':
+        return `${Math.min(ctx.totalAttempts, 1)} / 1 次测试`;
+      case 'explorer':
+        return `${ctx.completedTests} / 3 种测试`;
+      case 'jack-of-all-trades':
+        return `${ctx.completedTests} / 9 种测试`;
+      case 'persistent':
+        return `${ctx.totalAttempts} / 25 次`;
+      case 'dedicated':
+        return `${ctx.totalAttempts} / 100 次`;
+      case 'marathon':
+        return `${Math.round(ctx.totalDuration / 60000)} / 30 分钟`;
+      case 'record-breaker':
+        return store.getAllTestRecords().some((r) => r.isNewRecord) ? '已刷新纪录' : '等待刷新纪录';
+      case 'lightning-fast':
+        return `${best('reaction') || 0} / 250 ms`;
+      case 'speed-demon':
+        return `${best('reaction') || 0} / 180 ms`;
+      case 'memory-keeper':
+        return `${best('number-memory') || 0} / 12 位`;
+      case 'photographic-memory':
+        return `${best('number-memory') || 0} / 20 位`;
+      case 'typing-novice':
+        return `${best('typing') || 0} / 40 WPM`;
+      case 'typing-master':
+        return `${best('typing') || 0} / 80 WPM`;
+      case 'sharpshooter':
+        return `${best('aim') ? `${best('aim')} ms` : '—'} / 400 ms`;
+      case 'sniper':
+        return `${best('aim') ? `${best('aim')} ms` : '—'} / 280 ms`;
+      case 'smarter-than-chimp':
+        return `${best('chimp') || 0} / 8 关`;
+      case 'eagle-eye':
+        return `${best('color-vision') || 0} / 25 级`;
+      case 'sequence-master':
+        return `${best('sequence-memory') || 0} / 12 轮`;
+      case 'stroop-master':
+        return `${best('stroop') || 0} / 60 分`;
+      case 'human-calculator':
+        return `${best('math-speed') || 0} / 40 题`;
+      default:
+        return undefined;
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-10 border-b border-white/5 bg-bg-primary/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-white/5 bg-bg-primary/80 backdrop-blur-xl">
         <div className="container py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -582,42 +705,48 @@ export default function Profile() {
           {activeTab === 'history' && (
             <div className="space-y-5 animate-fade-in" style={{ animationDelay: '200ms' }}>
               <div className="glass-card p-5">
-                <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-5">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-5 h-5 text-neon-cyan" />
                     <h2 className="font-display font-bold text-lg">历史测试记录</h2>
                     <span className="text-xs text-white/40 ml-2">共 {filteredRecords.length} 条</span>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="relative" ref={dropdownRef}>
+                      <label className="text-[11px] text-white/40 mb-1.5 block tracking-wider uppercase">测试类型筛选</label>
                       <button
-                        onClick={() => setShowTestDropdown((v) => !v)}
-                        className="w-full sm:w-60 flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/80 hover:border-white/20 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowTestDropdown((v) => !v);
+                        }}
+                        className="w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/80 hover:border-white/20 transition-all"
                       >
                         <span className="flex items-center gap-2 truncate">
-                          <Search className="w-4 h-4 text-white/40" />
+                          <Search className="w-4 h-4 text-white/40 flex-shrink-0" />
                           {filterTests.length === 0
                             ? '全部测试类型'
                             : filterTests.length === 1
                               ? TESTS.find((t) => t.id === filterTests[0])?.name
                               : `已选 ${filterTests.length} 种测试`}
                         </span>
-                        <ChevronDown className={cn('w-4 h-4 text-white/40 transition-transform', showTestDropdown && 'rotate-180')} />
+                        <ChevronDown className={cn('w-4 h-4 text-white/40 transition-transform flex-shrink-0', showTestDropdown && 'rotate-180')} />
                       </button>
                       {showTestDropdown && (
-                        <div className="absolute z-20 top-full mt-2 left-0 right-0 glass-card p-2 max-h-72 overflow-y-auto scrollbar-thin">
+                        <div className="absolute z-[100] top-[calc(100%+8px)] left-0 right-0 glass-card p-2 max-h-80 overflow-y-auto scrollbar-thin border border-white/15 shadow-2xl animate-fade-in-scale">
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setFilterTests([]);
                               setShowTestDropdown(false);
                             }}
                             className={cn(
-                              'w-full text-left px-3 py-2 rounded-lg text-sm transition-all mb-1',
+                              'w-full text-left px-3 py-2 rounded-lg text-sm transition-all mb-1 flex items-center justify-between',
                               filterTests.length === 0 ? 'bg-neon-cyan/15 text-neon-cyan' : 'text-white/70 hover:bg-white/5',
                             )}
                           >
-                            全部测试类型
+                            <span>全部测试类型</span>
+                            {filterTests.length === 0 && <Check className="w-4 h-4" />}
                           </button>
                           {TESTS.map((test) => {
                             const active = filterTests.includes(test.id);
@@ -625,17 +754,21 @@ export default function Profile() {
                             return (
                               <button
                                 key={test.id}
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   toggleTestFilter(test.id);
                                 }}
                                 className={cn(
-                                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all',
-                                  active ? `${test.color}15` : 'hover:bg-white/5',
+                                  'w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all',
+                                  'hover:bg-white/5',
                                 )}
                                 style={active ? { backgroundColor: `${test.color}15`, color: test.color } : { color: 'rgba(255,255,255,0.8)' }}
                               >
-                                <Icon className="w-4 h-4" />
-                                <span>{test.name}</span>
+                                <span className="flex items-center gap-2">
+                                  <Icon className="w-4 h-4" />
+                                  <span>{test.name}</span>
+                                </span>
+                                {active && <Check className="w-4 h-4" />}
                               </button>
                             );
                           })}
@@ -643,27 +776,80 @@ export default function Profile() {
                       )}
                     </div>
 
-                    <div className="flex flex-wrap gap-1.5 p-1.5 bg-white/5 rounded-xl border border-white/10">
-                      {DATE_RANGE_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          onClick={() => setFilterDateRange(opt.value)}
-                          className={cn(
-                            'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-                            filterDateRange === opt.value
-                              ? 'bg-white/10 text-white'
-                              : 'text-white/50 hover:text-white/80',
-                          )}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
+                    <div>
+                      <label className="text-[11px] text-white/40 mb-1.5 block tracking-wider uppercase">日期范围</label>
+                      <div className="flex flex-wrap gap-1.5 p-1.5 bg-white/5 rounded-xl border border-white/10">
+                        {QUICK_DATE_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => {
+                              setFilterQuickDate(opt.value);
+                              if (opt.value !== 'custom') {
+                                setCustomStartDate('');
+                                setCustomEndDate('');
+                              }
+                            }}
+                            className={cn(
+                              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                              filterQuickDate === opt.value
+                                ? 'bg-white/10 text-white'
+                                : 'text-white/50 hover:text-white/80',
+                            )}
+                          >
+                            {opt.value === 'custom' ? (
+                              <span className="flex items-center gap-1">
+                                <CalendarRange className="w-3 h-3" />
+                                {opt.label}
+                              </span>
+                            ) : (
+                              opt.label
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {filterTests.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  {filterQuickDate === 'custom' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] text-white/40 mb-1.5 block">开始日期</label>
+                          <input
+                            type="date"
+                            value={customStartDate}
+                            max={customEndDate || undefined}
+                            onChange={(e) => setCustomStartDate(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/80 focus:outline-none focus:border-neon-cyan/50 focus:bg-white/[0.07] transition-all [color-scheme:dark]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-white/40 mb-1.5 block">结束日期</label>
+                          <input
+                            type="date"
+                            value={customEndDate}
+                            min={customStartDate || undefined}
+                            onChange={(e) => setCustomEndDate(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/80 focus:outline-none focus:border-neon-cyan/50 focus:bg-white/[0.07] transition-all [color-scheme:dark]"
+                          />
+                        </div>
+                      </div>
+                      {customDateError && (
+                        <div className="flex items-center gap-2 text-xs text-neon-red px-3 py-2 rounded-xl bg-neon-red/10 border border-neon-red/30">
+                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                          {customDateError}
+                        </div>
+                      )}
+                      {!customDateError && (customStartDate || customEndDate) && (
+                        <div className="flex items-center gap-2 text-xs text-neon-green px-3 py-2 rounded-xl bg-neon-green/10 border border-neon-green/30">
+                          <Check className="w-4 h-4 flex-shrink-0" />
+                          自定义范围: {quickDateLabel()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
                     {filterTests.map((id) => {
                       const test = TESTS.find((t) => t.id === id)!;
                       const Icon = iconMap[id];
@@ -676,29 +862,43 @@ export default function Profile() {
                         >
                           <Icon className="w-3 h-3" />
                           {test.name}
-                          <span className="ml-1 opacity-60">×</span>
+                          <XIcon className="w-3 h-3 ml-0.5 opacity-60" />
                         </button>
                       );
                     })}
-                    <button
-                      onClick={() => setFilterTests([])}
-                      className="text-xs text-white/40 hover:text-white/70 px-2 py-1"
-                    >
-                      清空全部
-                    </button>
+                    {(filterTests.length > 0 || (filterQuickDate === 'custom' && (customStartDate || customEndDate))) && (
+                      <button
+                        onClick={() => {
+                          setFilterTests([]);
+                          setFilterQuickDate('all');
+                          setCustomStartDate('');
+                          setCustomEndDate('');
+                        }}
+                        className="text-xs text-white/40 hover:text-white/70 px-2 py-1 flex items-center gap-1"
+                      >
+                        <XIcon className="w-3 h-3" />
+                        清空筛选
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="space-y-5">
-                {recordsByDate.length === 0 ? (
+                {recordsByDate.length === 0 || customRangeInvalid ? (
                   <div className="glass-card p-16 flex flex-col items-center justify-center text-white/40">
                     <Calendar className="w-14 h-14 mb-4 opacity-25" />
-                    <p className="text-base font-medium mb-1">暂无测试记录</p>
-                    <p className="text-sm text-white/30">调整筛选条件或去完成一些测试吧</p>
-                    <Link to="/" className="mt-5 btn-primary text-sm">
-                      返回首页开始测试
-                    </Link>
+                    <p className="text-base font-medium mb-1">
+                      {customRangeInvalid ? '请修正日期范围' : '暂无测试记录'}
+                    </p>
+                    <p className="text-sm text-white/30 mb-2">
+                      {customRangeInvalid ? customDateError : '调整筛选条件或去完成一些测试吧'}
+                    </p>
+                    {!customRangeInvalid && (
+                      <Link to="/" className="mt-3 btn-primary text-sm">
+                        返回首页开始测试
+                      </Link>
+                    )}
                   </div>
                 ) : (
                   recordsByDate.map(([dateKey, dayRecords]) => {
@@ -736,7 +936,7 @@ export default function Profile() {
                               return (
                                 <div key={record.id} className="relative pl-4">
                                   <div
-                                    className="absolute -left-[9px] top-4 w-4 h-4 rounded-full border-4"
+                                    className="absolute -left-[9px] top-4 w-4 h-4 rounded-full border-4 z-10"
                                     style={{
                                       backgroundColor: '#0a0a0f',
                                       borderColor: test.color,
@@ -855,10 +1055,11 @@ export default function Profile() {
                       <div
                         key={r}
                         className={cn(
-                          'rounded-xl p-3 border bg-gradient-to-br',
+                          'rounded-xl p-3 border bg-gradient-to-br cursor-pointer hover:scale-[1.02] transition-all',
                           info.bg,
                           info.border,
                         )}
+                        onClick={() => setFilterRarity(r)}
                       >
                         <div className="text-[10px] font-bold uppercase tracking-wider text-white/60 mb-1">
                           {info.label}
@@ -879,22 +1080,23 @@ export default function Profile() {
                   const info = RARITY_INFO[ach.rarity];
                   const unlockedAt = store.unlockedAchievements.find((u) => u.id === ach.id)?.unlockedAt;
                   return (
-                    <div
+                    <button
                       key={ach.id}
+                      onClick={() => setDetailAchievement(ach)}
                       className={cn(
-                        'relative rounded-2xl p-5 border-2 transition-all overflow-hidden group',
+                        'relative rounded-2xl p-5 border-2 transition-all overflow-hidden text-left cursor-pointer',
                         unlocked
-                          ? cn('bg-gradient-to-br', info.bg, info.border, info.glow, 'hover:scale-[1.03]')
-                          : 'bg-white/[0.03] border-white/10 grayscale opacity-75 hover:opacity-100 hover:grayscale-0',
+                          ? cn('bg-gradient-to-br', info.bg, info.border, info.glow, 'hover:scale-[1.03] hover:-translate-y-1')
+                          : 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]',
                       )}
                     >
                       {unlocked && (
-                        <div className="absolute -top-1 -right-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-neon-green/20 text-neon-green border border-neon-green/40">
+                        <div className="absolute -top-1 -right-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-neon-green/20 text-neon-green border border-neon-green/40 z-10">
                           已解锁
                         </div>
                       )}
                       {!unlocked && (
-                        <div className="absolute top-3 right-3">
+                        <div className="absolute top-3 right-3 z-10">
                           <Lock className="w-4 h-4 text-white/30" />
                         </div>
                       )}
@@ -902,7 +1104,6 @@ export default function Profile() {
                       <div
                         className={cn(
                           'w-16 h-16 rounded-2xl flex items-center justify-center mb-4 border-2 transition-all',
-                          unlocked ? '' : 'bg-white/5 border-white/10',
                         )}
                         style={
                           unlocked
@@ -911,10 +1112,13 @@ export default function Profile() {
                                 borderColor: `${ach.color}aa`,
                                 boxShadow: `0 0 25px ${ach.color}44, inset 0 0 20px ${ach.color}22`,
                               }
-                            : undefined
+                            : {
+                                backgroundColor: 'rgba(255,255,255,0.04)',
+                                borderColor: 'rgba(255,255,255,0.1)',
+                              }
                         }
                       >
-                        <span className={cn('text-3xl', unlocked ? '' : 'opacity-40 blur-[1px]')}>
+                        <span className={cn('text-3xl', !unlocked && 'opacity-40 grayscale')}>
                           {unlocked ? ach.icon : '🔒'}
                         </span>
                       </div>
@@ -922,9 +1126,8 @@ export default function Profile() {
                       <div
                         className={cn(
                           'text-[10px] font-bold uppercase tracking-widest mb-1.5',
-                          unlocked ? '' : 'text-white/30',
                         )}
-                        style={unlocked ? { color: ach.color } : undefined}
+                        style={unlocked ? { color: ach.color } : { color: 'rgba(255,255,255,0.3)' }}
                       >
                         {info.label}
                       </div>
@@ -938,27 +1141,34 @@ export default function Profile() {
                         {ach.name}
                       </h3>
 
-                      <p className={cn('text-xs leading-relaxed', unlocked ? 'text-white/65' : 'text-white/30')}>
+                      <p className={cn('text-xs leading-relaxed mb-3', unlocked ? 'text-white/65' : 'text-white/30')}>
                         {ach.description}
                       </p>
 
-                      {unlocked && unlockedAt && (
-                        <div className="mt-4 pt-3 border-t border-white/10 flex items-center gap-1.5 text-[11px] text-white/40">
-                          <Clock className="w-3 h-3" />
-                          {formatDateTime(unlockedAt)}
+                      <div className="pt-3 border-t border-white/10">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className={cn(unlocked ? 'text-white/50' : 'text-white/30')}>
+                            {unlocked ? '解锁时间' : '进度'}
+                          </span>
+                          <span
+                            className={cn(
+                              'font-medium',
+                              unlocked ? 'text-white/70' : 'text-white/50',
+                            )}
+                          >
+                            {unlocked && unlockedAt
+                              ? formatDateTime(unlockedAt)
+                              : computeProgressLabel(ach) ?? '—'}
+                          </span>
                         </div>
-                      )}
-
-                      {!unlocked && ach.relatedTest && ach.relatedTest !== 'all' && (
-                        <Link
-                          to={TESTS.find((t) => t.id === ach.relatedTest)?.route ?? '/'}
-                          className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-neon-cyan hover:underline"
-                        >
-                          <span>去{TESTS.find((t) => t.id === ach.relatedTest)?.name}解锁</span>
-                          <span>→</span>
-                        </Link>
-                      )}
-                    </div>
+                        {!unlocked && (
+                          <div className="mt-2 text-[10px] text-neon-cyan/70 flex items-center justify-end gap-0.5">
+                            点击查看详情
+                            <ArrowLeft className="w-3 h-3 rotate-180" />
+                          </div>
+                        )}
+                      </div>
+                    </button>
                   );
                 })}
               </div>
@@ -967,9 +1177,14 @@ export default function Profile() {
         </div>
       </main>
 
-      {celebrateIds.length > 0 && (
-        // 这里复用 AchievementCelebration，但我们在 App.tsx 也有全局监听
-        <></>
+      {detailAchievement && (
+        <AchievementDetailModal
+          achievement={detailAchievement}
+          unlocked={store.isAchievementUnlocked(detailAchievement.id)}
+          unlockedAt={store.unlockedAchievements.find((u) => u.id === detailAchievement.id)?.unlockedAt}
+          progressLabel={computeProgressLabel(detailAchievement)}
+          onClose={() => setDetailAchievement(null)}
+        />
       )}
     </div>
   );
